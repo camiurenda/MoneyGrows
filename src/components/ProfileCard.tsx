@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { User, DollarSign } from 'lucide-react'
+import { Egg, DollarSign } from 'lucide-react'
 import type { Perfil } from '../types'
 
 interface ProfileCardProps {
@@ -28,7 +28,7 @@ export function ProfileCard({ perfil, onUpdate, color }: ProfileCardProps) {
     <div className="bg-card rounded-2xl p-6 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)] flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${iconBg}`}>
-          <User size={20} />
+          <Egg size={20} />
         </div>
         <input
           value={nombre}

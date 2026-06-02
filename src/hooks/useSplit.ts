@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Perfil, Gasto, SplitPorGasto, Resumen } from '../types'
+import type { Perfil, Gasto, SplitPorGasto, Resumen, MetaAhorro } from '../types'
 
 function getMesActual(): string {
   const d = new Date()
@@ -34,12 +34,14 @@ export function useSplit() {
   const [mes, setMes] = useState<string>(() => readLocal('mg_mes', getMesActual()))
   const [perfiles, setPerfiles] = useState<Perfil[]>([])
   const [gastos, setGastos] = useState<Gasto[]>([])
+  const [metaAhorro, setMetaAhorro] = useState<MetaAhorro | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
 
   const localPerfilesRef = useRef<Record<string, Perfil[]>>(readLocal('mg_perfiles_mes', {}))
   const localGastosRef = useRef<Record<string, Gasto[]>>(readLocal('mg_gastos_mes', {}))
+  const localMetaRef = useRef<Record<string, MetaAhorro>>(readLocal('mg_meta_mes', {}))
 
   const setLocalPerfilesMes = useCallback((m: string, v: Perfil[]) => {
     localPerfilesRef.current = { ...localPerfilesRef.current, [m]: v }
@@ -48,6 +50,10 @@ export function useSplit() {
   const setLocalGastosMes = useCallback((m: string, v: Gasto[]) => {
     localGastosRef.current = { ...localGastosRef.current, [m]: v }
     writeLocal('mg_gastos_mes', localGastosRef.current)
+  }, [])
+  const setLocalMetaMes = useCallback((m: string, v: MetaAhorro) => {
+    localMetaRef.current = { ...localMetaRef.current, [m]: v }
+    writeLocal('mg_meta_mes', localMetaRef.current)
   }, [])
 
   const loadData = useCallback(async () => {
@@ -71,6 +77,14 @@ export function useSplit() {
 
       if (gastosErr) throw gastosErr
 
+      const { data: metaData, error: metaErr } = await supabase
+        .from('metas')
+        .select('*')
+        .eq('mes', mes)
+        .maybeSingle()
+
+      if (metaErr) throw metaErr
+
       let fetchedPerfiles = (perfilesData ?? []) as Perfil[]
       if (fetchedPerfiles.length === 0) {
         const defaults: Perfil[] = [
@@ -91,6 +105,11 @@ export function useSplit() {
       const fetchedGastos = (gastosData ?? []) as Gasto[]
       setGastos(fetchedGastos)
       setLocalGastosMes(mes, fetchedGastos)
+
+      const fetchedMeta = metaData as MetaAhorro | null
+      setMetaAhorro(fetchedMeta)
+      if (fetchedMeta) setLocalMetaMes(mes, fetchedMeta)
+
       setOffline(false)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -98,11 +117,12 @@ export function useSplit() {
       setOffline(true)
       setPerfiles(localPerfilesRef.current[mes] ?? [])
       setGastos(localGastosRef.current[mes] ?? [])
+      setMetaAhorro(localMetaRef.current[mes] ?? null)
       setError('No se pudo conectar con la base. Se usa modo local.')
     } finally {
       setLoading(false)
     }
-  }, [mes, setLocalPerfilesMes, setLocalGastosMes])
+  }, [mes, setLocalPerfilesMes, setLocalGastosMes, setLocalMetaMes])
 
   useEffect(() => {
     writeLocal('mg_mes', mes)
@@ -123,6 +143,26 @@ export function useSplit() {
       }
     },
     [perfiles, mes, offline, setLocalPerfilesMes]
+  )
+
+  const updateMetaAhorro = useCallback(
+    async (monto: number, descripcion: string) => {
+      const nueva: MetaAhorro = { mes, monto, descripcion }
+      setMetaAhorro(nueva)
+      setLocalMetaMes(mes, nueva)
+
+      if (!offline) {
+        const { error: err } = await supabase
+          .from('metas')
+          .upsert({ mes, monto, descripcion } as any, { onConflict: 'mes' })
+        if (err) {
+          console.warn('Error guardando meta:', err)
+        } else {
+          loadData()
+        }
+      }
+    },
+    [mes, offline, setLocalMetaMes, loadData]
   )
 
   const addGasto = useCallback(
@@ -249,10 +289,12 @@ export function useSplit() {
     nombreDelMes,
     perfiles,
     gastos,
+    metaAhorro,
     loading,
     error,
     offline,
     updatePerfil,
+    updateMetaAhorro,
     addGasto,
     removeGasto,
     splitPorGasto,

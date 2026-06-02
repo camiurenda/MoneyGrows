@@ -21,6 +21,14 @@ export interface SplitPorGasto {
   montoB: number
 }
 
+export interface MetaAhorro {
+  id?: string
+  mes: string
+  monto: number
+  descripcion: string
+  created_at?: string
+}
+
 export interface Resumen {
   totalGastos: number
   ingresoTotal: number
