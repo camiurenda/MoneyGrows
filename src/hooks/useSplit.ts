@@ -57,18 +57,20 @@ export function useSplit() {
 
       if (gastosErr) throw gastosErr
 
-      const fetchedPerfiles = (perfilesData ?? []) as Perfil[]
+      let fetchedPerfiles = (perfilesData ?? []) as Perfil[]
       if (fetchedPerfiles.length === 0) {
         // seed inicial
         const seeds = localPerfiles
         for (const p of seeds) {
-          await supabase.from('perfiles').insert({ id: p.id, nombre: p.nombre, ingreso: p.ingreso } as any)
+          await supabase.from('perfiles').insert({ nombre: p.nombre, ingreso: p.ingreso } as any)
         }
-        setPerfiles(seeds)
+        const { data: reloaded } = await supabase.from('perfiles').select('*').order('id')
+        fetchedPerfiles = (reloaded ?? []) as Perfil[]
+        setLocalPerfiles(fetchedPerfiles)
       } else {
-        setPerfiles(fetchedPerfiles)
         setLocalPerfiles(fetchedPerfiles)
       }
+      setPerfiles(fetchedPerfiles)
 
       const fetchedGastos = (gastosData ?? []) as Gasto[]
       setGastos(fetchedGastos)
