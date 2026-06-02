@@ -1,21 +1,28 @@
 import { useState } from 'react'
-import { Target, Pencil, Check, X, PiggyBank } from 'lucide-react'
-import type { MetaAhorro } from '../types'
+import { Target, Pencil, Check, X, PiggyBank, PlusCircle } from 'lucide-react'
+import type { MetaAhorro, AporteMeta } from '../types'
 
 interface SavingsGoalProps {
   meta: MetaAhorro | null
   ahorroActual: number
+  aportes: AporteMeta[]
+  nombreA: string
+  nombreB: string
   onUpdate: (monto: number, descripcion: string) => void
+  onAddAporte: (monto: number, aportante: 'A' | 'B') => void
 }
 
 function fmt(n: number) {
   return n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 }
 
-export function SavingsGoal({ meta, ahorroActual, onUpdate }: SavingsGoalProps) {
+export function SavingsGoal({ meta, ahorroActual, aportes, nombreA, nombreB, onUpdate, onAddAporte }: SavingsGoalProps) {
   const [editando, setEditando] = useState(false)
   const [montoStr, setMontoStr] = useState(String(meta?.monto ?? 0))
   const [desc, setDesc] = useState(meta?.descripcion ?? '')
+  const [aportando, setAportando] = useState(false)
+  const [aporteMonto, setAporteMonto] = useState('')
+  const [aporteQuien, setAporteQuien] = useState<'A' | 'B'>('A')
 
   const metaMonto = meta?.monto ?? 0
   const porcentaje = metaMonto > 0 ? Math.min(100, Math.max(0, (ahorroActual / metaMonto) * 100)) : 0
@@ -31,6 +38,16 @@ export function SavingsGoal({ meta, ahorroActual, onUpdate }: SavingsGoalProps) 
     setMontoStr(String(meta?.monto ?? 0))
     setDesc(meta?.descripcion ?? '')
     setEditando(false)
+  }
+
+  const agregarAporte = () => {
+    const m = parseFloat(aporteMonto)
+    if (!isNaN(m) && m > 0) {
+      onAddAporte(m, aporteQuien)
+      setAporteMonto('')
+      setAporteQuien('A')
+      setAportando(false)
+    }
   }
 
   return (
@@ -120,6 +137,62 @@ export function SavingsGoal({ meta, ahorroActual, onUpdate }: SavingsGoalProps) 
                   <span className="text-danger font-medium">Faltan {fmt(Math.abs(sobrante))}</span>
                 )}
               </div>
+
+              {aportes.length > 0 && (
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <p className="text-xs text-text-light">Aportes</p>
+                  {aportes.map((a) => (
+                    <div key={a.id} className="flex items-center justify-between text-sm py-1 px-2 rounded-lg bg-bg">
+                      <span className="text-text">{a.aportante === 'A' ? nombreA : nombreB}</span>
+                      <span className="font-medium text-text">{fmt(a.monto)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!aportando ? (
+                <button
+                  onClick={() => setAportando(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-bg text-accent text-sm font-medium hover:bg-accent/10 transition-colors"
+                >
+                  <PlusCircle size={16} /> Sumar aporte
+                </button>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="number"
+                    value={aporteMonto}
+                    onChange={(e) => setAporteMonto(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-border bg-bg text-text focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+                    placeholder="Monto"
+                    min={0}
+                  />
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <input type="radio" name="aporte" checked={aporteQuien === 'A'} onChange={() => setAporteQuien('A')} className="accent-accent" />
+                      {nombreA}
+                    </label>
+                    <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <input type="radio" name="aporte" checked={aporteQuien === 'B'} onChange={() => setAporteQuien('B')} className="accent-secondary" />
+                      {nombreB}
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={agregarAporte}
+                      className="flex items-center gap-1 px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors"
+                    >
+                      <Check size={16} /> Aportar
+                    </button>
+                    <button
+                      onClick={() => setAportando(false)}
+                      className="flex items-center gap-1 px-4 py-2 rounded-xl bg-bg text-text-light text-sm font-medium hover:bg-border transition-colors"
+                    >
+                      <X size={16} /> Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="text-center py-2">

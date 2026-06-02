@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Perfil, Gasto, SplitPorGasto, Resumen, MetaAhorro } from '../types'
+import type { Perfil, Gasto, SplitPorGasto, Resumen, MetaAhorro, AporteMeta } from '../types'
 
 function getMesActual(): string {
   const d = new Date()
@@ -51,6 +51,7 @@ export function useSplit() {
   const [perfiles, setPerfiles] = useState<Perfil[]>([])
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [metaAhorro, setMetaAhorro] = useState<MetaAhorro | null>(null)
+  const [aportes, setAportes] = useState<AporteMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
@@ -58,6 +59,7 @@ export function useSplit() {
   const localPerfilesRef = useRef<Record<string, Perfil[]>>(readLocal('mg_perfiles_mes', {}))
   const localGastosRef = useRef<Record<string, Gasto[]>>(readLocal('mg_gastos_mes', {}))
   const localMetaRef = useRef<Record<string, MetaAhorro>>(readLocal('mg_meta_mes', {}))
+  const localAportesRef = useRef<Record<string, AporteMeta[]>>(readLocal('mg_aportes_mes', {}))
 
   const setLocalPerfilesMes = useCallback((m: string, v: Perfil[]) => {
     localPerfilesRef.current = { ...localPerfilesRef.current, [m]: v }
@@ -70,6 +72,10 @@ export function useSplit() {
   const setLocalMetaMes = useCallback((m: string, v: MetaAhorro) => {
     localMetaRef.current = { ...localMetaRef.current, [m]: v }
     writeLocal('mg_meta_mes', localMetaRef.current)
+  }, [])
+  const setLocalAportesMes = useCallback((m: string, v: AporteMeta[]) => {
+    localAportesRef.current = { ...localAportesRef.current, [m]: v }
+    writeLocal('mg_aportes_mes', localAportesRef.current)
   }, [])
 
   const loadData = useCallback(async () => {
@@ -130,6 +136,22 @@ export function useSplit() {
         setMetaAhorro(localMetaRef.current[mes] ?? null)
       }
 
+      try {
+        const { data: aportesData, error: aportesErr } = await supabase
+          .from('aportes')
+          .select('*')
+          .eq('mes', mes)
+          .order('created_at', { ascending: false })
+        if (!aportesErr) {
+          const fetchedAportes = (aportesData ?? []) as AporteMeta[]
+          setAportes(fetchedAportes)
+          setLocalAportesMes(mes, fetchedAportes)
+        }
+      } catch (aportesEx) {
+        console.warn('[loadData] tabla aportes no disponible:', formatError(aportesEx))
+        setAportes(localAportesRef.current[mes] ?? [])
+      }
+
       setOffline(false)
     } catch (e) {
       const msg = formatError(e)
@@ -138,11 +160,12 @@ export function useSplit() {
       setPerfiles(localPerfilesRef.current[mes] ?? [])
       setGastos(localGastosRef.current[mes] ?? [])
       setMetaAhorro(localMetaRef.current[mes] ?? null)
+      setAportes(localAportesRef.current[mes] ?? [])
       setError('No se pudo conectar con la base. Se usa modo local.')
     } finally {
       setLoading(false)
     }
-  }, [mes, setLocalPerfilesMes, setLocalGastosMes, setLocalMetaMes])
+  }, [mes, setLocalPerfilesMes, setLocalGastosMes, setLocalMetaMes, setLocalAportesMes])
 
   useEffect(() => {
     writeLocal('mg_mes', mes)
@@ -209,6 +232,31 @@ export function useSplit() {
       }
     },
     [gastos, mes, offline, setLocalGastosMes, loadData]
+  )
+
+  const addAporte = useCallback(
+    async (monto: number, aportante: 'A' | 'B') => {
+      const nuevo: AporteMeta = {
+        id: crypto.randomUUID(),
+        mes,
+        aportante,
+        monto,
+        created_at: new Date().toISOString(),
+      }
+      const next = [nuevo, ...aportes]
+      setAportes(next)
+      setLocalAportesMes(mes, next)
+
+      if (!offline) {
+        const { error: err } = await supabase.from('aportes').insert({ mes, aportante, monto } as any)
+        if (err) {
+          console.warn('Error guardando aporte:', err)
+        } else {
+          loadData()
+        }
+      }
+    },
+    [aportes, mes, offline, setLocalAportesMes, loadData]
   )
 
   const removeGasto = useCallback(
@@ -310,12 +358,14 @@ export function useSplit() {
     perfiles,
     gastos,
     metaAhorro,
+    aportes,
     loading,
     error,
     offline,
     updatePerfil,
     updateMetaAhorro,
     addGasto,
+    addAporte,
     removeGasto,
     splitPorGasto,
     resumen,

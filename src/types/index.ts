@@ -29,6 +29,14 @@ export interface MetaAhorro {
   created_at?: string
 }
 
+export interface AporteMeta {
+  id?: string
+  mes: string
+  aportante: 'A' | 'B'
+  monto: number
+  created_at?: string
+}
+
 export interface Resumen {
   totalGastos: number
   ingresoTotal: number

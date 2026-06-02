@@ -13,7 +13,7 @@ function cambiarMes(ym: string, delta: number): string {
 }
 
 function App() {
-  const { mes, setMes, nombreDelMes, perfiles, gastos, metaAhorro, loading, error, offline, updatePerfil, updateMetaAhorro, addGasto, removeGasto, splitPorGasto, resumen } =
+  const { mes, setMes, nombreDelMes, perfiles, gastos, metaAhorro, aportes, loading, error, offline, updatePerfil, updateMetaAhorro, addGasto, addAporte, removeGasto, splitPorGasto, resumen } =
     useSplit()
 
   if (loading) {
@@ -26,7 +26,7 @@ function App() {
 
   const nombreA = perfiles[0]?.nombre ?? 'Camila'
   const nombreB = perfiles[1]?.nombre ?? 'Lucía'
-  const ahorroActual = Math.max(0, resumen.ingresoTotal - resumen.totalGastos)
+  const ahorroActual = aportes.reduce((s, a) => s + a.monto, 0)
 
   return (
     <div className="min-h-screen bg-bg py-8 px-4 sm:px-6">
@@ -76,7 +76,7 @@ function App() {
           <ProfileCard perfil={perfiles[1] ?? { id: 2, nombre: 'Lucía', ingreso: 0, mes, created_at: '' }} onUpdate={updatePerfil} color="secondary" />
         </section>
 
-        <SavingsGoal meta={metaAhorro} ahorroActual={ahorroActual} onUpdate={updateMetaAhorro} />
+        <SavingsGoal meta={metaAhorro} ahorroActual={ahorroActual} aportes={aportes} nombreA={nombreA} nombreB={nombreB} onUpdate={updateMetaAhorro} onAddAporte={addAporte} />
 
         <ExpenseForm onAdd={addGasto} nombreA={nombreA} nombreB={nombreB} />
 
