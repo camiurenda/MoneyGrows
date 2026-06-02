@@ -3,8 +3,8 @@ import { supabase } from '../lib/supabase'
 import type { Perfil, Gasto, SplitPorGasto, Resumen } from '../types'
 
 const DEFAULT_PROFILES: Perfil[] = [
-  { id: 1, nombre: 'Ella', ingreso: 0, created_at: new Date().toISOString() },
-  { id: 2, nombre: 'Él', ingreso: 0, created_at: new Date().toISOString() },
+  { id: 1, nombre: 'Camila', ingreso: 0, created_at: new Date().toISOString() },
+  { id: 2, nombre: 'Lucía', ingreso: 0, created_at: new Date().toISOString() },
 ]
 
 function readLocal<T>(key: string, fallback: T): T {
