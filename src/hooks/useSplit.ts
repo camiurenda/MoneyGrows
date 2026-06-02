@@ -1,27 +1,27 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Perfil, Gasto, SplitPorGasto, Resumen } from '../types'
 
-const PERFIL_IDS = [1, 2]
+const DEFAULT_PROFILES: Perfil[] = [
+  { id: 1, nombre: 'Ella', ingreso: 0, created_at: new Date().toISOString() },
+  { id: 2, nombre: 'Él', ingreso: 0, created_at: new Date().toISOString() },
+]
 
-function useLocalStorage<T>(key: string, initial: T): [T, (v: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const raw = localStorage.getItem(key)
-      return raw ? (JSON.parse(raw) as T) : initial
-    } catch {
-      return initial
-    }
-  })
-  const setStored = useCallback((v: T) => {
-    setValue(v)
-    try {
-      localStorage.setItem(key, JSON.stringify(v))
-    } catch {
-      // noop
-    }
-  }, [key])
-  return [value, setStored]
+function readLocal<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function writeLocal<T>(key: string, value: T) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // noop
+  }
 }
 
 export function useSplit() {
@@ -31,13 +31,20 @@ export function useSplit() {
   const [error, setError] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
 
-  const [localPerfiles, setLocalPerfiles] = useLocalStorage<Perfil[]>('mg_perfiles', [
-    { id: 1, nombre: 'Ella', ingreso: 0, created_at: new Date().toISOString() },
-    { id: 2, nombre: 'Él', ingreso: 0, created_at: new Date().toISOString() },
-  ])
-  const [localGastos, setLocalGastos] = useLocalStorage<Gasto[]>('mg_gastos', [])
+  const localPerfilesRef = useRef<Perfil[]>(readLocal('mg_perfiles', DEFAULT_PROFILES))
+  const localGastosRef = useRef<Gasto[]>(readLocal('mg_gastos', []))
+
+  const setLocalPerfiles = useCallback((v: Perfil[]) => {
+    localPerfilesRef.current = v
+    writeLocal('mg_perfiles', v)
+  }, [])
+  const setLocalGastos = useCallback((v: Gasto[]) => {
+    localGastosRef.current = v
+    writeLocal('mg_gastos', v)
+  }, [])
 
   const loadData = useCallback(async () => {
+    console.log('[loadData] iniciando...')
     setLoading(true)
     setError(null)
 
@@ -45,7 +52,6 @@ export function useSplit() {
       const { data: perfilesData, error: perfilesErr } = await supabase
         .from('perfiles')
         .select('*')
-        .in('id', PERFIL_IDS)
         .order('id')
 
       if (perfilesErr) throw perfilesErr
@@ -57,43 +63,43 @@ export function useSplit() {
 
       if (gastosErr) throw gastosErr
 
+      console.log('[loadData] perfilesData:', perfilesData)
       let fetchedPerfiles = (perfilesData ?? []) as Perfil[]
       if (fetchedPerfiles.length === 0) {
-        // seed inicial
-        const seeds = localPerfiles
+        console.log('[loadData] seeding perfiles...')
+        const seeds = localPerfilesRef.current
         for (const p of seeds) {
           await supabase.from('perfiles').insert({ nombre: p.nombre, ingreso: p.ingreso } as any)
         }
         const { data: reloaded } = await supabase.from('perfiles').select('*').order('id')
         fetchedPerfiles = (reloaded ?? []) as Perfil[]
+        console.log('[loadData] reloaded perfiles:', fetchedPerfiles)
         setLocalPerfiles(fetchedPerfiles)
       } else {
         setLocalPerfiles(fetchedPerfiles)
       }
       setPerfiles(fetchedPerfiles)
 
+      console.log('[loadData] gastosData:', gastosData)
       const fetchedGastos = (gastosData ?? []) as Gasto[]
       setGastos(fetchedGastos)
       setLocalGastos(fetchedGastos)
       setOffline(false)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        setOffline(true)
-        setPerfiles(localPerfiles)
-        setGastos(localGastos)
-      } else {
-        setError('No se pudo conectar con la base. Se usa modo local.')
-        setOffline(true)
-        setPerfiles(localPerfiles)
-        setGastos(localGastos)
-      }
+      console.error('[loadData] error:', msg, e)
+      setOffline(true)
+      setPerfiles(localPerfilesRef.current)
+      setGastos(localGastosRef.current)
+      setError('No se pudo conectar con la base. Se usa modo local.')
     } finally {
+      console.log('[loadData] finally -> setLoading(false)')
       setLoading(false)
     }
-  }, [localPerfiles, localGastos, setLocalPerfiles, setLocalGastos])
+  }, [setLocalPerfiles, setLocalGastos])
 
   useEffect(() => {
+    console.log('[useEffect] disparando loadData')
     loadData()
   }, [loadData])
 
