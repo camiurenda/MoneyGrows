@@ -2,10 +2,16 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Perfil, Gasto, SplitPorGasto, Resumen } from '../types'
 
-const DEFAULT_PROFILES: Perfil[] = [
-  { id: 1, nombre: 'Camila', ingreso: 0, created_at: new Date().toISOString() },
-  { id: 2, nombre: 'Lucía', ingreso: 0, created_at: new Date().toISOString() },
-]
+function getMesActual(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function nombreDelMes(ym: string): string {
+  const [y, m] = ym.split('-').map(Number)
+  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  return `${meses[m - 1]} ${y}`
+}
 
 function readLocal<T>(key: string, fallback: T): T {
   try {
@@ -25,26 +31,27 @@ function writeLocal<T>(key: string, value: T) {
 }
 
 export function useSplit() {
+  const [mes, setMes] = useState<string>(() => readLocal('mg_mes', getMesActual()))
   const [perfiles, setPerfiles] = useState<Perfil[]>([])
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
 
-  const localPerfilesRef = useRef<Perfil[]>(readLocal('mg_perfiles', DEFAULT_PROFILES))
-  const localGastosRef = useRef<Gasto[]>(readLocal('mg_gastos', []))
+  const localPerfilesRef = useRef<Record<string, Perfil[]>>(readLocal('mg_perfiles_mes', {}))
+  const localGastosRef = useRef<Record<string, Gasto[]>>(readLocal('mg_gastos_mes', {}))
 
-  const setLocalPerfiles = useCallback((v: Perfil[]) => {
-    localPerfilesRef.current = v
-    writeLocal('mg_perfiles', v)
+  const setLocalPerfilesMes = useCallback((m: string, v: Perfil[]) => {
+    localPerfilesRef.current = { ...localPerfilesRef.current, [m]: v }
+    writeLocal('mg_perfiles_mes', localPerfilesRef.current)
   }, [])
-  const setLocalGastos = useCallback((v: Gasto[]) => {
-    localGastosRef.current = v
-    writeLocal('mg_gastos', v)
+  const setLocalGastosMes = useCallback((m: string, v: Gasto[]) => {
+    localGastosRef.current = { ...localGastosRef.current, [m]: v }
+    writeLocal('mg_gastos_mes', localGastosRef.current)
   }, [])
 
   const loadData = useCallback(async () => {
-    console.log('[loadData] iniciando...')
+    console.log('[loadData] mes:', mes)
     setLoading(true)
     setError(null)
 
@@ -52,6 +59,7 @@ export function useSplit() {
       const { data: perfilesData, error: perfilesErr } = await supabase
         .from('perfiles')
         .select('*')
+        .eq('mes', mes)
         .order('id')
 
       if (perfilesErr) throw perfilesErr
@@ -59,55 +67,56 @@ export function useSplit() {
       const { data: gastosData, error: gastosErr } = await supabase
         .from('gastos')
         .select('*')
+        .eq('mes', mes)
         .order('created_at', { ascending: false })
 
       if (gastosErr) throw gastosErr
 
-      console.log('[loadData] perfilesData:', perfilesData)
       let fetchedPerfiles = (perfilesData ?? []) as Perfil[]
       if (fetchedPerfiles.length === 0) {
-        console.log('[loadData] seeding perfiles...')
-        const seeds = localPerfilesRef.current
-        for (const p of seeds) {
-          await supabase.from('perfiles').insert({ nombre: p.nombre, ingreso: p.ingreso } as any)
+        console.log('[loadData] seeding perfiles para mes:', mes)
+        const defaults: Perfil[] = [
+          { id: 0, nombre: 'Camila', ingreso: 0, mes, created_at: new Date().toISOString() },
+          { id: 0, nombre: 'Lucía', ingreso: 0, mes, created_at: new Date().toISOString() },
+        ]
+        for (const p of defaults) {
+          await supabase.from('perfiles').insert({ nombre: p.nombre, ingreso: p.ingreso, mes } as any)
         }
-        const { data: reloaded } = await supabase.from('perfiles').select('*').order('id')
+        const { data: reloaded } = await supabase.from('perfiles').select('*').eq('mes', mes).order('id')
         fetchedPerfiles = (reloaded ?? []) as Perfil[]
         console.log('[loadData] reloaded perfiles:', fetchedPerfiles)
-        setLocalPerfiles(fetchedPerfiles)
+        setLocalPerfilesMes(mes, fetchedPerfiles)
       } else {
-        setLocalPerfiles(fetchedPerfiles)
+        setLocalPerfilesMes(mes, fetchedPerfiles)
       }
       setPerfiles(fetchedPerfiles)
 
-      console.log('[loadData] gastosData:', gastosData)
       const fetchedGastos = (gastosData ?? []) as Gasto[]
       setGastos(fetchedGastos)
-      setLocalGastos(fetchedGastos)
+      setLocalGastosMes(mes, fetchedGastos)
       setOffline(false)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       console.error('[loadData] error:', msg, e)
       setOffline(true)
-      setPerfiles(localPerfilesRef.current)
-      setGastos(localGastosRef.current)
+      setPerfiles(localPerfilesRef.current[mes] ?? [])
+      setGastos(localGastosRef.current[mes] ?? [])
       setError('No se pudo conectar con la base. Se usa modo local.')
     } finally {
-      console.log('[loadData] finally -> setLoading(false)')
       setLoading(false)
     }
-  }, [setLocalPerfiles, setLocalGastos])
+  }, [mes, setLocalPerfilesMes, setLocalGastosMes])
 
   useEffect(() => {
-    console.log('[useEffect] disparando loadData')
+    writeLocal('mg_mes', mes)
     loadData()
-  }, [loadData])
+  }, [mes, loadData])
 
   const updatePerfil = useCallback(
     async (id: number, partial: Partial<Pick<Perfil, 'nombre' | 'ingreso'>>) => {
       const next = perfiles.map((p) => (p.id === id ? { ...p, ...partial } : p))
       setPerfiles(next)
-      setLocalPerfiles(next)
+      setLocalPerfilesMes(mes, next)
 
       if (!offline) {
         const { error: err } = await supabase.from('perfiles').update(partial as any).eq('id', id)
@@ -116,7 +125,7 @@ export function useSplit() {
         }
       }
     },
-    [perfiles, offline, setLocalPerfiles]
+    [perfiles, mes, offline, setLocalPerfilesMes]
   )
 
   const addGasto = useCallback(
@@ -125,30 +134,30 @@ export function useSplit() {
         id: crypto.randomUUID(),
         nombre,
         monto,
+        mes,
         created_at: new Date().toISOString(),
       }
       const next = [nuevo, ...gastos]
       setGastos(next)
-      setLocalGastos(next)
+      setLocalGastosMes(mes, next)
 
       if (!offline) {
-        const { error: err } = await supabase.from('gastos').insert({ nombre, monto } as any)
+        const { error: err } = await supabase.from('gastos').insert({ nombre, monto, mes } as any)
         if (err) {
           console.warn('Error guardando gasto:', err)
         } else {
-          // recargar para tener el UUID real de la base
           loadData()
         }
       }
     },
-    [gastos, offline, setLocalGastos, loadData]
+    [gastos, mes, offline, setLocalGastosMes, loadData]
   )
 
   const removeGasto = useCallback(
     async (id: string) => {
       const next = gastos.filter((g) => g.id !== id)
       setGastos(next)
-      setLocalGastos(next)
+      setLocalGastosMes(mes, next)
 
       if (!offline) {
         const { error: err } = await supabase.from('gastos').delete().eq('id', id)
@@ -157,7 +166,7 @@ export function useSplit() {
         }
       }
     },
-    [gastos, offline, setLocalGastos]
+    [gastos, mes, offline, setLocalGastosMes]
   )
 
   const splitPorGasto = useMemo<SplitPorGasto[]>(() => {
@@ -227,6 +236,9 @@ export function useSplit() {
   }, [gastos, perfiles, splitPorGasto])
 
   return {
+    mes,
+    setMes,
+    nombreDelMes,
     perfiles,
     gastos,
     loading,

@@ -1,12 +1,18 @@
-import { Heart } from 'lucide-react'
+import { Heart, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSplit } from './hooks/useSplit'
 import { ProfileCard } from './components/ProfileCard'
 import { ExpenseForm } from './components/ExpenseForm'
 import { ExpenseList } from './components/ExpenseList'
 import { SummaryPanel } from './components/SummaryPanel'
 
+function cambiarMes(ym: string, delta: number): string {
+  const [y, m] = ym.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 function App() {
-  const { perfiles, gastos, loading, error, offline, updatePerfil, addGasto, removeGasto, splitPorGasto, resumen } =
+  const { mes, setMes, nombreDelMes, perfiles, gastos, loading, error, offline, updatePerfil, addGasto, removeGasto, splitPorGasto, resumen } =
     useSplit()
 
   if (loading) {
@@ -17,8 +23,8 @@ function App() {
     )
   }
 
-  const nombreA = perfiles[0]?.nombre ?? 'Pareja 1'
-  const nombreB = perfiles[1]?.nombre ?? 'Pareja 2'
+  const nombreA = perfiles[0]?.nombre ?? 'Camila'
+  const nombreB = perfiles[1]?.nombre ?? 'Lucía'
 
   return (
     <div className="min-h-screen bg-bg py-8 px-4 sm:px-6">
@@ -29,6 +35,27 @@ function App() {
             <h1 className="text-2xl sm:text-3xl font-bold text-text tracking-tight">MoneyGrows</h1>
           </div>
           <p className="text-text-light text-sm">Dividí gastos con tu media naranja, justo y proporcional.</p>
+
+          <div className="inline-flex items-center gap-2 mt-3 bg-card rounded-full shadow-[var(--shadow-card)] px-1 py-1">
+            <button
+              onClick={() => setMes(cambiarMes(mes, -1))}
+              className="p-2 rounded-full hover:bg-bg text-text-light hover:text-text transition-colors"
+              title="Mes anterior"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <span className="text-sm font-semibold text-text min-w-[140px] text-center select-none">
+              {nombreDelMes(mes)}
+            </span>
+            <button
+              onClick={() => setMes(cambiarMes(mes, 1))}
+              className="p-2 rounded-full hover:bg-bg text-text-light hover:text-text transition-colors"
+              title="Mes siguiente"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+
           {offline && (
             <span className="inline-block mt-2 text-xs bg-secondary/10 text-secondary px-2 py-1 rounded-full">
               Modo local (sin conexión a base)
@@ -42,8 +69,8 @@ function App() {
         </header>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <ProfileCard perfil={perfiles[0] ?? { id: 1, nombre: 'Ella', ingreso: 0, created_at: '' }} onUpdate={updatePerfil} color="accent" />
-          <ProfileCard perfil={perfiles[1] ?? { id: 2, nombre: 'Él', ingreso: 0, created_at: '' }} onUpdate={updatePerfil} color="secondary" />
+          <ProfileCard perfil={perfiles[0] ?? { id: 1, nombre: 'Camila', ingreso: 0, mes, created_at: '' }} onUpdate={updatePerfil} color="accent" />
+          <ProfileCard perfil={perfiles[1] ?? { id: 2, nombre: 'Lucía', ingreso: 0, mes, created_at: '' }} onUpdate={updatePerfil} color="secondary" />
         </section>
 
         <ExpenseForm onAdd={addGasto} />

@@ -2,6 +2,7 @@ export interface Perfil {
   id: number
   nombre: string
   ingreso: number
+  mes: string
   created_at: string
 }
 
@@ -9,6 +10,7 @@ export interface Gasto {
   id: string
   nombre: string
   monto: number
+  mes: string
   created_at: string
 }
 
