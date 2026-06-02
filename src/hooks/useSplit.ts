@@ -30,6 +30,22 @@ function writeLocal<T>(key: string, value: T) {
   }
 }
 
+function formatError(e: unknown): string {
+  if (e instanceof Error) return e.message
+  if (typeof e === 'object' && e !== null) {
+    const o = e as Record<string, unknown>
+    if (typeof o.message === 'string') return o.message
+    if (typeof o.error_description === 'string') return o.error_description
+    if (typeof o.code === 'string') return `Error ${o.code}`
+    try {
+      return JSON.stringify(o)
+    } catch {
+      return String(e)
+    }
+  }
+  return String(e)
+}
+
 export function useSplit() {
   const [mes, setMes] = useState<string>(() => readLocal('mg_mes', getMesActual()))
   const [perfiles, setPerfiles] = useState<Perfil[]>([])
@@ -77,14 +93,6 @@ export function useSplit() {
 
       if (gastosErr) throw gastosErr
 
-      const { data: metaData, error: metaErr } = await supabase
-        .from('metas')
-        .select('*')
-        .eq('mes', mes)
-        .maybeSingle()
-
-      if (metaErr) throw metaErr
-
       let fetchedPerfiles = (perfilesData ?? []) as Perfil[]
       if (fetchedPerfiles.length === 0) {
         const defaults: Perfil[] = [
@@ -106,13 +114,25 @@ export function useSplit() {
       setGastos(fetchedGastos)
       setLocalGastosMes(mes, fetchedGastos)
 
-      const fetchedMeta = metaData as MetaAhorro | null
-      setMetaAhorro(fetchedMeta)
-      if (fetchedMeta) setLocalMetaMes(mes, fetchedMeta)
+      try {
+        const { data: metaData, error: metaErr } = await supabase
+          .from('metas')
+          .select('*')
+          .eq('mes', mes)
+          .maybeSingle()
+        if (!metaErr) {
+          const fetchedMeta = metaData as MetaAhorro | null
+          setMetaAhorro(fetchedMeta)
+          if (fetchedMeta) setLocalMetaMes(mes, fetchedMeta)
+        }
+      } catch (metaEx) {
+        console.warn('[loadData] tabla metas no disponible:', formatError(metaEx))
+        setMetaAhorro(localMetaRef.current[mes] ?? null)
+      }
 
       setOffline(false)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = formatError(e)
       console.error('[loadData] error:', msg, e)
       setOffline(true)
       setPerfiles(localPerfilesRef.current[mes] ?? [])
