@@ -10,6 +10,7 @@ export interface Gasto {
   id: string
   nombre: string
   monto: number
+  pagador: 'A' | 'B'
   mes: string
   created_at: string
 }

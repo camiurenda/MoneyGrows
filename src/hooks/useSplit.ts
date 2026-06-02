@@ -7,7 +7,7 @@ function getMesActual(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-function nombreDelMes(ym: string): string {
+export function nombreDelMes(ym: string): string {
   const [y, m] = ym.split('-').map(Number)
   const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   return `${meses[m - 1]} ${y}`
@@ -51,7 +51,6 @@ export function useSplit() {
   }, [])
 
   const loadData = useCallback(async () => {
-    console.log('[loadData] mes:', mes)
     setLoading(true)
     setError(null)
 
@@ -74,7 +73,6 @@ export function useSplit() {
 
       let fetchedPerfiles = (perfilesData ?? []) as Perfil[]
       if (fetchedPerfiles.length === 0) {
-        console.log('[loadData] seeding perfiles para mes:', mes)
         const defaults: Perfil[] = [
           { id: 0, nombre: 'Camila', ingreso: 0, mes, created_at: new Date().toISOString() },
           { id: 0, nombre: 'Lucía', ingreso: 0, mes, created_at: new Date().toISOString() },
@@ -84,7 +82,6 @@ export function useSplit() {
         }
         const { data: reloaded } = await supabase.from('perfiles').select('*').eq('mes', mes).order('id')
         fetchedPerfiles = (reloaded ?? []) as Perfil[]
-        console.log('[loadData] reloaded perfiles:', fetchedPerfiles)
         setLocalPerfilesMes(mes, fetchedPerfiles)
       } else {
         setLocalPerfilesMes(mes, fetchedPerfiles)
@@ -129,11 +126,12 @@ export function useSplit() {
   )
 
   const addGasto = useCallback(
-    async (nombre: string, monto: number) => {
+    async (nombre: string, monto: number, pagador: 'A' | 'B') => {
       const nuevo: Gasto = {
         id: crypto.randomUUID(),
         nombre,
         monto,
+        pagador,
         mes,
         created_at: new Date().toISOString(),
       }
@@ -142,7 +140,7 @@ export function useSplit() {
       setLocalGastosMes(mes, next)
 
       if (!offline) {
-        const { error: err } = await supabase.from('gastos').insert({ nombre, monto, mes } as any)
+        const { error: err } = await supabase.from('gastos').insert({ nombre, monto, pagador, mes } as any)
         if (err) {
           console.warn('Error guardando gasto:', err)
         } else {
@@ -187,8 +185,21 @@ export function useSplit() {
     const totalGastos = gastos.reduce((s, g) => s + g.monto, 0)
     const ingresoTotal = (a?.ingreso ?? 0) + (b?.ingreso ?? 0)
 
-    const aporteRealA = splitPorGasto.reduce((s, sp) => s + sp.montoA, 0)
-    const aporteRealB = splitPorGasto.reduce((s, sp) => s + sp.montoB, 0)
+    let pagadoA = 0
+    let pagadoB = 0
+    let debeA = 0
+    let debeB = 0
+
+    for (const sp of splitPorGasto) {
+      const g = sp.gasto
+      if (g.pagador === 'A') {
+        pagadoA += g.monto
+      } else {
+        pagadoB += g.monto
+      }
+      debeA += sp.montoA
+      debeB += sp.montoB
+    }
 
     if (ingresoTotal === 0) {
       return {
@@ -196,40 +207,37 @@ export function useSplit() {
         ingresoTotal: 0,
         aporteEsperadoA: totalGastos / 2,
         aporteEsperadoB: totalGastos / 2,
-        aporteRealA,
-        aporteRealB,
+        aporteRealA: pagadoA,
+        aporteRealB: pagadoB,
         balance: 0,
         deudor: 'ninguno',
       }
     }
 
-    const aporteEsperadoA = totalGastos * ((a?.ingreso ?? 0) / ingresoTotal)
-    const aporteEsperadoB = totalGastos * ((b?.ingreso ?? 0) / ingresoTotal)
-
-    const diferenciaA = aporteRealA - aporteEsperadoA
+    const balanceA = pagadoA - debeA
     const tolerancia = 0.01
 
     let balance = 0
     let deudor: 'A' | 'B' | 'ninguno' = 'ninguno'
 
-    if (Math.abs(diferenciaA) <= tolerancia) {
+    if (Math.abs(balanceA) <= tolerancia) {
       balance = 0
       deudor = 'ninguno'
-    } else if (diferenciaA < 0) {
-      balance = Math.abs(diferenciaA)
+    } else if (balanceA < 0) {
+      balance = Math.abs(balanceA)
       deudor = 'A'
     } else {
-      balance = diferenciaA
+      balance = balanceA
       deudor = 'B'
     }
 
     return {
       totalGastos,
       ingresoTotal,
-      aporteEsperadoA,
-      aporteEsperadoB,
-      aporteRealA,
-      aporteRealB,
+      aporteEsperadoA: debeA,
+      aporteEsperadoB: debeB,
+      aporteRealA: pagadoA,
+      aporteRealB: pagadoB,
       balance,
       deudor,
     }

@@ -73,7 +73,7 @@ function App() {
           <ProfileCard perfil={perfiles[1] ?? { id: 2, nombre: 'Lucía', ingreso: 0, mes, created_at: '' }} onUpdate={updatePerfil} color="secondary" />
         </section>
 
-        <ExpenseForm onAdd={addGasto} />
+        <ExpenseForm onAdd={addGasto} nombreA={nombreA} nombreB={nombreB} />
 
         <section>
           <div className="flex items-center justify-between mb-3">

@@ -1,4 +1,4 @@
-import { Trash2 } from 'lucide-react'
+import { Trash2, CreditCard } from 'lucide-react'
 import type { SplitPorGasto } from '../types'
 
 interface ExpenseItemProps {
@@ -13,11 +13,20 @@ function fmt(n: number) {
 }
 
 export function ExpenseItem({ split, nombreA, nombreB, onRemove }: ExpenseItemProps) {
+  const g = split.gasto
+  const pagadorNombre = g.pagador === 'A' ? nombreA : nombreB
+  const pagadorColor = g.pagador === 'A' ? 'text-accent bg-accent/10' : 'text-secondary bg-secondary/10'
+
   return (
     <div className="bg-card rounded-2xl p-4 shadow-[var(--shadow-card)] flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 transition-shadow hover:shadow-[var(--shadow-card-hover)]">
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-text truncate">{split.gasto.nombre}</p>
-        <p className="text-sm text-text-light">{fmt(split.gasto.monto)}</p>
+        <p className="font-medium text-text truncate">{g.nombre}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <p className="text-sm text-text-light">{fmt(g.monto)}</p>
+          <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${pagadorColor}`}>
+            <CreditCard size={12} /> Pagó {pagadorNombre}
+          </span>
+        </div>
       </div>
       <div className="flex items-center gap-4 flex-1">
         <div className="flex-1 text-right">
@@ -31,7 +40,7 @@ export function ExpenseItem({ split, nombreA, nombreB, onRemove }: ExpenseItemPr
         </div>
       </div>
       <button
-        onClick={() => onRemove(split.gasto.id)}
+        onClick={() => onRemove(g.id)}
         className="p-2 rounded-lg text-text-light hover:text-danger hover:bg-danger/10 transition-colors self-end sm:self-auto"
         title="Borrar gasto"
       >
