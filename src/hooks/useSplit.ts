@@ -200,18 +200,17 @@ export function useSplit() {
           .upsert({ mes, monto, descripcion } as any, { onConflict: 'mes' })
         if (err) {
           console.warn('Error guardando meta:', err)
-        } else {
-          loadData()
         }
       }
     },
-    [mes, offline, setLocalMetaMes, loadData]
+    [mes, offline, setLocalMetaMes]
   )
 
   const addGasto = useCallback(
     async (nombre: string, monto: number, pagador: 'A' | 'B') => {
+      const tempId = crypto.randomUUID()
       const nuevo: Gasto = {
-        id: crypto.randomUUID(),
+        id: tempId,
         nombre,
         monto,
         pagador,
@@ -223,21 +222,29 @@ export function useSplit() {
       setLocalGastosMes(mes, next)
 
       if (!offline) {
-        const { error: err } = await supabase.from('gastos').insert({ nombre, monto, pagador, mes } as any)
+        const { data, error: err } = await supabase
+          .from('gastos')
+          .insert({ nombre, monto, pagador, mes } as any)
+          .select()
+          .single()
         if (err) {
-          console.warn('Error guardando gasto:', err)
-        } else {
-          loadData()
+          console.warn('[addGasto] error:', JSON.stringify(err))
+        } else if (data) {
+          const real = data as Gasto
+          const synced = next.map((g) => (g.id === tempId ? real : g))
+          setGastos(synced)
+          setLocalGastosMes(mes, synced)
         }
       }
     },
-    [gastos, mes, offline, setLocalGastosMes, loadData]
+    [gastos, mes, offline, setLocalGastosMes]
   )
 
   const addAporte = useCallback(
     async (monto: number, aportante: 'A' | 'B') => {
+      const tempId = crypto.randomUUID()
       const nuevo: AporteMeta = {
-        id: crypto.randomUUID(),
+        id: tempId,
         mes,
         aportante,
         monto,
@@ -248,15 +255,22 @@ export function useSplit() {
       setLocalAportesMes(mes, next)
 
       if (!offline) {
-        const { error: err } = await supabase.from('aportes').insert({ mes, aportante, monto } as any)
+        const { data, error: err } = await supabase
+          .from('aportes')
+          .insert({ mes, aportante, monto } as any)
+          .select()
+          .single()
         if (err) {
-          console.warn('Error guardando aporte:', err)
-        } else {
-          loadData()
+          console.warn('Error guardando aporte:', JSON.stringify(err))
+        } else if (data) {
+          const real = data as AporteMeta
+          const synced = next.map((a) => (a.id === tempId ? real : a))
+          setAportes(synced)
+          setLocalAportesMes(mes, synced)
         }
       }
     },
-    [aportes, mes, offline, setLocalAportesMes, loadData]
+    [aportes, mes, offline, setLocalAportesMes]
   )
 
   const removeGasto = useCallback(

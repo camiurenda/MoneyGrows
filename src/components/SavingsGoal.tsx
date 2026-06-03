@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Target, Pencil, Check, X, PiggyBank, PlusCircle } from 'lucide-react'
+import { Target, Pencil, Check, X, PiggyBank, PlusCircle, Loader2 } from 'lucide-react'
 import type { MetaAhorro, AporteMeta } from '../types'
 
 interface SavingsGoalProps {
@@ -23,6 +23,7 @@ export function SavingsGoal({ meta, ahorroActual, aportes, nombreA, nombreB, onU
   const [aportando, setAportando] = useState(false)
   const [aporteMonto, setAporteMonto] = useState('')
   const [aporteQuien, setAporteQuien] = useState<'A' | 'B'>('A')
+  const [guardandoAporte, setGuardandoAporte] = useState(false)
 
   const metaMonto = meta?.monto ?? 0
   const porcentaje = metaMonto > 0 ? Math.min(100, Math.max(0, (ahorroActual / metaMonto) * 100)) : 0
@@ -40,13 +41,17 @@ export function SavingsGoal({ meta, ahorroActual, aportes, nombreA, nombreB, onU
     setEditando(false)
   }
 
-  const agregarAporte = () => {
+  const agregarAporte = async () => {
     const m = parseFloat(aporteMonto)
-    if (!isNaN(m) && m > 0) {
-      onAddAporte(m, aporteQuien)
+    if (isNaN(m) || m <= 0) return
+    setGuardandoAporte(true)
+    try {
+      await onAddAporte(m, aporteQuien)
       setAporteMonto('')
       setAporteQuien('A')
       setAportando(false)
+    } finally {
+      setGuardandoAporte(false)
     }
   }
 
@@ -163,30 +168,34 @@ export function SavingsGoal({ meta, ahorroActual, aportes, nombreA, nombreB, onU
                     type="number"
                     value={aporteMonto}
                     onChange={(e) => setAporteMonto(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-border bg-bg text-text focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+                    disabled={guardandoAporte}
+                    className="w-full px-3 py-2 rounded-xl border border-border bg-bg text-text focus:outline-none focus:ring-1 focus:ring-accent transition-all disabled:opacity-50"
                     placeholder="Monto"
                     min={0}
                   />
                   <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                      <input type="radio" name="aporte" checked={aporteQuien === 'A'} onChange={() => setAporteQuien('A')} className="accent-accent" />
+                    <label className={`flex items-center gap-1.5 text-sm cursor-pointer ${guardandoAporte ? 'opacity-50' : ''}`}>
+                      <input type="radio" name="aporte" checked={aporteQuien === 'A'} onChange={() => setAporteQuien('A')} className="accent-accent" disabled={guardandoAporte} />
                       {nombreA}
                     </label>
-                    <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                      <input type="radio" name="aporte" checked={aporteQuien === 'B'} onChange={() => setAporteQuien('B')} className="accent-secondary" />
+                    <label className={`flex items-center gap-1.5 text-sm cursor-pointer ${guardandoAporte ? 'opacity-50' : ''}`}>
+                      <input type="radio" name="aporte" checked={aporteQuien === 'B'} onChange={() => setAporteQuien('B')} className="accent-secondary" disabled={guardandoAporte} />
                       {nombreB}
                     </label>
                   </div>
                   <div className="flex gap-2">
                     <button
                       onClick={agregarAporte}
-                      className="flex items-center gap-1 px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors"
+                      disabled={guardandoAporte}
+                      className="flex items-center gap-1 px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      <Check size={16} /> Aportar
+                      {guardandoAporte ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                      {guardandoAporte ? 'Guardando...' : 'Aportar'}
                     </button>
                     <button
                       onClick={() => setAportando(false)}
-                      className="flex items-center gap-1 px-4 py-2 rounded-xl bg-bg text-text-light text-sm font-medium hover:bg-border transition-colors"
+                      disabled={guardandoAporte}
+                      className="flex items-center gap-1 px-4 py-2 rounded-xl bg-bg text-text-light text-sm font-medium hover:bg-border transition-colors disabled:opacity-60"
                     >
                       <X size={16} /> Cancelar
                     </button>

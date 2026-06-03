@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PlusCircle, Receipt } from 'lucide-react'
+import { PlusCircle, Receipt, Loader2 } from 'lucide-react'
 
 interface ExpenseFormProps {
   onAdd: (nombre: string, monto: number, pagador: 'A' | 'B') => void
@@ -11,15 +11,21 @@ export function ExpenseForm({ onAdd, nombreA, nombreB }: ExpenseFormProps) {
   const [nombre, setNombre] = useState('')
   const [monto, setMonto] = useState('')
   const [pagador, setPagador] = useState<'A' | 'B'>('A')
+  const [guardando, setGuardando] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const m = parseFloat(monto)
     if (!nombre.trim() || isNaN(m) || m <= 0) return
-    onAdd(nombre.trim(), m, pagador)
-    setNombre('')
-    setMonto('')
-    setPagador('A')
+    setGuardando(true)
+    try {
+      await onAdd(nombre.trim(), m, pagador)
+    } finally {
+      setGuardando(false)
+      setNombre('')
+      setMonto('')
+      setPagador('A')
+    }
   }
 
   return (
@@ -45,17 +51,19 @@ export function ExpenseForm({ onAdd, nombreA, nombreB }: ExpenseFormProps) {
             type="number"
             value={monto}
             onChange={(e) => setMonto(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-bg text-text focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+            disabled={guardando}
+            className="w-full px-3 py-2 rounded-xl border border-border bg-bg text-text focus:outline-none focus:ring-1 focus:ring-accent transition-all disabled:opacity-50"
             placeholder="0"
             min={0}
           />
         </div>
         <button
           type="submit"
-          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-white font-medium hover:bg-accent-hover active:scale-95 transition-all"
+          disabled={guardando}
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-white font-medium hover:bg-accent-hover active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <PlusCircle size={18} />
-          Sumar
+          {guardando ? <Loader2 size={18} className="animate-spin" /> : <PlusCircle size={18} />}
+          {guardando ? 'Guardando...' : 'Sumar'}
         </button>
       </div>
       <div className="flex items-center gap-3">
