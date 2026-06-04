@@ -207,13 +207,14 @@ export function useSplit() {
   )
 
   const addGasto = useCallback(
-    async (nombre: string, monto: number, pagador: 'A' | 'B') => {
+    async (nombre: string, monto: number, pagador: 'A' | 'B', tipoSplit: 'proporcional' | 'igual' = 'proporcional') => {
       const tempId = crypto.randomUUID()
       const nuevo: Gasto = {
         id: tempId,
         nombre,
         monto,
         pagador,
+        tipo_split: tipoSplit,
         mes,
         created_at: new Date().toISOString(),
       }
@@ -224,7 +225,7 @@ export function useSplit() {
       if (!offline) {
         const { data, error: err } = await supabase
           .from('gastos')
-          .insert({ nombre, monto, pagador, mes } as any)
+          .insert({ nombre, monto, pagador, tipo_split: tipoSplit, mes } as any)
           .select()
           .single()
         if (err) {
@@ -292,14 +293,16 @@ export function useSplit() {
   const splitPorGasto = useMemo<SplitPorGasto[]>(() => {
     const [a, b] = perfiles.length >= 2 ? [perfiles[0], perfiles[1]] : [null, null]
     const totalIngreso = (a?.ingreso ?? 0) + (b?.ingreso ?? 0)
-    if (totalIngreso === 0) {
-      return gastos.map((g) => ({ gasto: g, montoA: g.monto / 2, montoB: g.monto / 2 }))
-    }
-    return gastos.map((g) => ({
-      gasto: g,
-      montoA: g.monto * ((a?.ingreso ?? 0) / totalIngreso),
-      montoB: g.monto * ((b?.ingreso ?? 0) / totalIngreso),
-    }))
+    return gastos.map((g) => {
+      if (g.tipo_split === 'igual' || totalIngreso === 0) {
+        return { gasto: g, montoA: g.monto / 2, montoB: g.monto / 2 }
+      }
+      return {
+        gasto: g,
+        montoA: g.monto * ((a?.ingreso ?? 0) / totalIngreso),
+        montoB: g.monto * ((b?.ingreso ?? 0) / totalIngreso),
+      }
+    })
   }, [perfiles, gastos])
 
   const resumen = useMemo<Resumen>(() => {

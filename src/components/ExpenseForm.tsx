@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { PlusCircle, Receipt, Loader2 } from 'lucide-react'
 
 interface ExpenseFormProps {
-  onAdd: (nombre: string, monto: number, pagador: 'A' | 'B') => void
+  onAdd: (nombre: string, monto: number, pagador: 'A' | 'B', tipoSplit: 'proporcional' | 'igual') => void
   nombreA: string
   nombreB: string
 }
@@ -11,6 +11,7 @@ export function ExpenseForm({ onAdd, nombreA, nombreB }: ExpenseFormProps) {
   const [nombre, setNombre] = useState('')
   const [monto, setMonto] = useState('')
   const [pagador, setPagador] = useState<'A' | 'B'>('A')
+  const [split50, setSplit50] = useState(false)
   const [guardando, setGuardando] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,12 +20,13 @@ export function ExpenseForm({ onAdd, nombreA, nombreB }: ExpenseFormProps) {
     if (!nombre.trim() || isNaN(m) || m <= 0) return
     setGuardando(true)
     try {
-      await onAdd(nombre.trim(), m, pagador)
+      await onAdd(nombre.trim(), m, pagador, split50 ? 'igual' : 'proporcional')
     } finally {
       setGuardando(false)
       setNombre('')
       setMonto('')
       setPagador('A')
+      setSplit50(false)
     }
   }
 
@@ -66,28 +68,44 @@ export function ExpenseForm({ onAdd, nombreA, nombreB }: ExpenseFormProps) {
           {guardando ? 'Guardando...' : 'Sumar'}
         </button>
       </div>
-      <div className="flex items-center gap-3">
-        <span className="text-xs text-text-light">Pagó:</span>
-        <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-          <input
-            type="radio"
-            name="pagador"
-            checked={pagador === 'A'}
-            onChange={() => setPagador('A')}
-            className="accent-accent"
-          />
-          {nombreA}
-        </label>
-        <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-          <input
-            type="radio"
-            name="pagador"
-            checked={pagador === 'B'}
-            onChange={() => setPagador('B')}
-            className="accent-secondary"
-          />
-          {nombreB}
-        </label>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-text-light">Pagó:</span>
+          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+            <input
+              type="radio"
+              name="pagador"
+              checked={pagador === 'A'}
+              onChange={() => setPagador('A')}
+              className="accent-accent"
+              disabled={guardando}
+            />
+            {nombreA}
+          </label>
+          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+            <input
+              type="radio"
+              name="pagador"
+              checked={pagador === 'B'}
+              onChange={() => setPagador('B')}
+              className="accent-secondary"
+              disabled={guardando}
+            />
+            {nombreB}
+          </label>
+        </div>
+        <div className="sm:ml-auto">
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={split50}
+              onChange={(e) => setSplit50(e.target.checked)}
+              disabled={guardando}
+              className="w-4 h-4 rounded accent-accent"
+            />
+            <span className={split50 ? 'text-accent font-medium' : 'text-text-light'}>50 / 50</span>
+          </label>
+        </div>
       </div>
     </form>
   )

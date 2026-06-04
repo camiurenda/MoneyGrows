@@ -1,4 +1,4 @@
-import { Trash2, CreditCard } from 'lucide-react'
+import { Trash2, CreditCard, Scale } from 'lucide-react'
 import type { SplitPorGasto } from '../types'
 
 interface ExpenseItemProps {
@@ -21,11 +21,16 @@ export function ExpenseItem({ split, nombreA, nombreB, onRemove }: ExpenseItemPr
     <div className="bg-card rounded-2xl p-4 shadow-[var(--shadow-card)] flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 transition-shadow hover:shadow-[var(--shadow-card-hover)]">
       <div className="flex-1 min-w-0">
         <p className="font-medium text-text truncate">{g.nombre}</p>
-        <div className="flex items-center gap-2 mt-0.5">
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           <p className="text-sm text-text-light">{fmt(g.monto)}</p>
           <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${pagadorColor}`}>
             <CreditCard size={12} /> Pagó {pagadorNombre}
           </span>
+          {g.tipo_split === 'igual' && (
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-bg text-text-light border border-border">
+              <Scale size={12} /> 50/50
+            </span>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-4 flex-1">

@@ -11,6 +11,7 @@ export interface Gasto {
   nombre: string
   monto: number
   pagador: 'A' | 'B'
+  tipo_split: 'proporcional' | 'igual'
   mes: string
   created_at: string
 }
