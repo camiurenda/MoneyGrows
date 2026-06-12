@@ -14,6 +14,19 @@ export interface Gasto {
   tipo_split: 'proporcional' | 'igual'
   mes: string
   created_at: string
+  porcentaje_persona_a?: number | null
+  porcentaje_persona_b?: number | null
+}
+
+export interface PagoAjuste {
+  id?: string
+  mes: string
+  pagador: 'A' | 'B'
+  beneficiario: 'A' | 'B'
+  monto: number
+  fecha: string
+  descripcion?: string | null
+  created_at?: string
 }
 
 export interface SplitPorGasto {
@@ -47,4 +60,7 @@ export interface Resumen {
   aporteRealB: number
   balance: number
   deudor: 'A' | 'B' | 'ninguno'
+  deudaBruta: number
+  totalPagado: number
+  deudaNeta: number
 }

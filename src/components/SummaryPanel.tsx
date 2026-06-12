@@ -14,13 +14,14 @@ export function SummaryPanel({ resumen, perfiles }: SummaryPanelProps) {
   const a = perfiles[0]
   const b = perfiles[1]
 
+  const deudorPerfil = resumen.deudor === 'A' ? a : resumen.deudor === 'B' ? b : null
+  const acreedorPerfil = resumen.deudor === 'A' ? b : resumen.deudor === 'B' ? a : null
+
   const balanceText = () => {
     if (resumen.deudor === 'ninguno') {
       return 'Están a mano. Nada que ajustar.'
     }
-    const deudor = resumen.deudor === 'A' ? a : b
-    const acreedor = resumen.deudor === 'A' ? b : a
-    return `${deudor?.nombre ?? 'Uno'} le debe ${fmt(resumen.balance)} a ${acreedor?.nombre ?? 'el otro'}.`
+    return `${deudorPerfil?.nombre ?? 'Uno'} le debe ${fmt(resumen.deudaNeta)} a ${acreedorPerfil?.nombre ?? 'el otro'}.`
   }
 
   return (
@@ -53,9 +54,25 @@ export function SummaryPanel({ resumen, perfiles }: SummaryPanelProps) {
 
       <div className="rounded-xl bg-accent/5 border border-accent/20 p-4 flex items-start gap-3">
         <TrendingUp size={20} className="text-accent mt-0.5 shrink-0" />
-        <div>
+        <div className="flex-1">
           <p className="font-semibold text-text">Ajuste del nido</p>
           <p className="text-text-light mt-0.5">{balanceText()}</p>
+          {resumen.deudor !== 'ninguno' && (
+            <div className="mt-3 flex flex-col gap-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-text-light">Deuda bruta calculada</span>
+                <span className="text-text">{fmt(resumen.deudaBruta)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-light">Ya pagado</span>
+                <span className="text-secondary">− {fmt(resumen.totalPagado)}</span>
+              </div>
+              <div className="flex justify-between border-t border-accent/20 pt-1.5 mt-0.5 font-semibold">
+                <span className="text-text">Pendiente</span>
+                <span className="text-accent">{fmt(resumen.deudaNeta)}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

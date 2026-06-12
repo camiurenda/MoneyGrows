@@ -5,6 +5,7 @@ import { ExpenseForm } from './components/ExpenseForm'
 import { ExpenseList } from './components/ExpenseList'
 import { SummaryPanel } from './components/SummaryPanel'
 import { SavingsGoal } from './components/SavingsGoal'
+import { PaymentsSection } from './components/PaymentsSection'
 
 function cambiarMes(ym: string, delta: number): string {
   const [y, m] = ym.split('-').map(Number)
@@ -13,7 +14,7 @@ function cambiarMes(ym: string, delta: number): string {
 }
 
 function App() {
-  const { mes, setMes, nombreDelMes, perfiles, gastos, metaAhorro, aportes, loading, error, offline, updatePerfil, updateMetaAhorro, addGasto, addAporte, removeGasto, splitPorGasto, resumen } =
+  const { mes, setMes, nombreDelMes, perfiles, gastos, metaAhorro, aportes, pagosAjuste, loading, error, offline, updatePerfil, updateMetaAhorro, addGasto, addAporte, removeGasto, addPagoAjuste, removePagoAjuste, splitPorGasto, resumen } =
     useSplit()
 
   if (loading) {
@@ -87,6 +88,14 @@ function App() {
           </div>
           <ExpenseList splits={splitPorGasto} nombreA={nombreA} nombreB={nombreB} onRemove={removeGasto} />
         </section>
+
+        <PaymentsSection
+          pagosAjuste={pagosAjuste}
+          nombreA={nombreA}
+          nombreB={nombreB}
+          onAdd={addPagoAjuste}
+          onRemove={removePagoAjuste}
+        />
 
         <SummaryPanel resumen={resumen} perfiles={perfiles} />
 

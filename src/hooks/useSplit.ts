@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Perfil, Gasto, SplitPorGasto, Resumen, MetaAhorro, AporteMeta } from '../types'
+import type { Perfil, Gasto, SplitPorGasto, Resumen, MetaAhorro, AporteMeta, PagoAjuste } from '../types'
 
 function getMesActual(): string {
   const d = new Date()
@@ -52,6 +52,7 @@ export function useSplit() {
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [metaAhorro, setMetaAhorro] = useState<MetaAhorro | null>(null)
   const [aportes, setAportes] = useState<AporteMeta[]>([])
+  const [pagosAjuste, setPagosAjuste] = useState<PagoAjuste[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
@@ -60,6 +61,7 @@ export function useSplit() {
   const localGastosRef = useRef<Record<string, Gasto[]>>(readLocal('mg_gastos_mes', {}))
   const localMetaRef = useRef<Record<string, MetaAhorro>>(readLocal('mg_meta_mes', {}))
   const localAportesRef = useRef<Record<string, AporteMeta[]>>(readLocal('mg_aportes_mes', {}))
+  const localPagosAjusteRef = useRef<Record<string, PagoAjuste[]>>(readLocal('mg_pagos_ajuste_mes', {}))
 
   const setLocalPerfilesMes = useCallback((m: string, v: Perfil[]) => {
     localPerfilesRef.current = { ...localPerfilesRef.current, [m]: v }
@@ -77,12 +79,16 @@ export function useSplit() {
     localAportesRef.current = { ...localAportesRef.current, [m]: v }
     writeLocal('mg_aportes_mes', localAportesRef.current)
   }, [])
+  const setLocalPagosAjusteMes = useCallback((m: string, v: PagoAjuste[]) => {
+    localPagosAjusteRef.current = { ...localPagosAjusteRef.current, [m]: v }
+    writeLocal('mg_pagos_ajuste_mes', localPagosAjusteRef.current)
+  }, [])
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
 
-    try {
+    try {  
       const { data: perfilesData, error: perfilesErr } = await supabase
         .from('perfiles')
         .select('*')
@@ -152,6 +158,22 @@ export function useSplit() {
         setAportes(localAportesRef.current[mes] ?? [])
       }
 
+      try {
+        const { data: pagosData, error: pagosErr } = await supabase
+          .from('pagos_ajuste')
+          .select('*')
+          .eq('mes', mes)
+          .order('created_at', { ascending: false })
+        if (!pagosErr) {
+          const fetchedPagos = (pagosData ?? []) as PagoAjuste[]
+          setPagosAjuste(fetchedPagos)
+          setLocalPagosAjusteMes(mes, fetchedPagos)
+        }
+      } catch (pagosEx) {
+        console.warn('[loadData] tabla pagos_ajuste no disponible:', formatError(pagosEx))
+        setPagosAjuste(localPagosAjusteRef.current[mes] ?? [])
+      }
+
       setOffline(false)
     } catch (e) {
       const msg = formatError(e)
@@ -161,11 +183,12 @@ export function useSplit() {
       setGastos(localGastosRef.current[mes] ?? [])
       setMetaAhorro(localMetaRef.current[mes] ?? null)
       setAportes(localAportesRef.current[mes] ?? [])
+      setPagosAjuste(localPagosAjusteRef.current[mes] ?? [])
       setError('No se pudo conectar con la base. Se usa modo local.')
     } finally {
       setLoading(false)
     }
-  }, [mes, setLocalPerfilesMes, setLocalGastosMes, setLocalMetaMes, setLocalAportesMes])
+  }, [mes, setLocalPerfilesMes, setLocalGastosMes, setLocalMetaMes, setLocalAportesMes, setLocalPagosAjusteMes])
 
   useEffect(() => {
     writeLocal('mg_mes', mes)
@@ -208,6 +231,15 @@ export function useSplit() {
 
   const addGasto = useCallback(
     async (nombre: string, monto: number, pagador: 'A' | 'B', tipoSplit: 'proporcional' | 'igual' = 'proporcional') => {
+      const [a, b] = perfiles.length >= 2 ? [perfiles[0], perfiles[1]] : [null, null]
+      const totalIngreso = (a?.ingreso ?? 0) + (b?.ingreso ?? 0)
+      let pctA: number | null = null
+      let pctB: number | null = null
+      if (tipoSplit === 'proporcional' && totalIngreso > 0) {
+        pctA = (a?.ingreso ?? 0) / totalIngreso
+        pctB = (b?.ingreso ?? 0) / totalIngreso
+      }
+
       const tempId = crypto.randomUUID()
       const nuevo: Gasto = {
         id: tempId,
@@ -217,6 +249,8 @@ export function useSplit() {
         tipo_split: tipoSplit,
         mes,
         created_at: new Date().toISOString(),
+        porcentaje_persona_a: pctA,
+        porcentaje_persona_b: pctB,
       }
       const next = [nuevo, ...gastos]
       setGastos(next)
@@ -225,7 +259,7 @@ export function useSplit() {
       if (!offline) {
         const { data, error: err } = await supabase
           .from('gastos')
-          .insert({ nombre, monto, pagador, tipo_split: tipoSplit, mes } as any)
+          .insert({ nombre, monto, pagador, tipo_split: tipoSplit, mes, porcentaje_persona_a: pctA, porcentaje_persona_b: pctB } as any)
           .select()
           .single()
         if (err) {
@@ -238,7 +272,7 @@ export function useSplit() {
         }
       }
     },
-    [gastos, mes, offline, setLocalGastosMes]
+    [gastos, mes, perfiles, offline, setLocalGastosMes]
   )
 
   const addAporte = useCallback(
@@ -290,11 +324,64 @@ export function useSplit() {
     [gastos, mes, offline, setLocalGastosMes]
   )
 
+  const addPagoAjuste = useCallback(
+    async (pago: Omit<PagoAjuste, 'id' | 'mes' | 'created_at'>) => {
+      const tempId = crypto.randomUUID()
+      const nuevo: PagoAjuste = { ...pago, id: tempId, mes, created_at: new Date().toISOString() }
+      const next = [nuevo, ...pagosAjuste]
+      setPagosAjuste(next)
+      setLocalPagosAjusteMes(mes, next)
+
+      if (!offline) {
+        const { data, error: err } = await supabase
+          .from('pagos_ajuste')
+          .insert({ ...pago, mes } as any)
+          .select()
+          .single()
+        if (err) {
+          console.warn('[addPagoAjuste] error:', JSON.stringify(err))
+        } else if (data) {
+          const real = data as PagoAjuste
+          const synced = next.map((p) => (p.id === tempId ? real : p))
+          setPagosAjuste(synced)
+          setLocalPagosAjusteMes(mes, synced)
+        }
+      }
+    },
+    [pagosAjuste, mes, offline, setLocalPagosAjusteMes]
+  )
+
+  const removePagoAjuste = useCallback(
+    async (id: string) => {
+      const next = pagosAjuste.filter((p) => p.id !== id)
+      setPagosAjuste(next)
+      setLocalPagosAjusteMes(mes, next)
+
+      if (!offline) {
+        const { error: err } = await supabase.from('pagos_ajuste').delete().eq('id', id)
+        if (err) {
+          console.warn('Error borrando pago ajuste:', err)
+        }
+      }
+    },
+    [pagosAjuste, mes, offline, setLocalPagosAjusteMes]
+  )
+
   const splitPorGasto = useMemo<SplitPorGasto[]>(() => {
     const [a, b] = perfiles.length >= 2 ? [perfiles[0], perfiles[1]] : [null, null]
     const totalIngreso = (a?.ingreso ?? 0) + (b?.ingreso ?? 0)
     return gastos.map((g) => {
-      if (g.tipo_split === 'igual' || totalIngreso === 0) {
+      if (g.tipo_split === 'igual') {
+        return { gasto: g, montoA: g.monto / 2, montoB: g.monto / 2 }
+      }
+      if (g.porcentaje_persona_a != null && g.porcentaje_persona_b != null) {
+        return {
+          gasto: g,
+          montoA: g.monto * g.porcentaje_persona_a,
+          montoB: g.monto * g.porcentaje_persona_b,
+        }
+      }
+      if (totalIngreso === 0) {
         return { gasto: g, montoA: g.monto / 2, montoB: g.monto / 2 }
       }
       return {
@@ -326,47 +413,47 @@ export function useSplit() {
       debeB += sp.montoB
     }
 
-    if (ingresoTotal === 0) {
-      return {
-        totalGastos,
-        ingresoTotal: 0,
-        aporteEsperadoA: totalGastos / 2,
-        aporteEsperadoB: totalGastos / 2,
-        aporteRealA: pagadoA,
-        aporteRealB: pagadoB,
-        balance: 0,
-        deudor: 'ninguno',
-      }
-    }
-
     const balanceA = pagadoA - debeA
     const tolerancia = 0.01
 
-    let balance = 0
+    let deudaBruta = 0
     let deudor: 'A' | 'B' | 'ninguno' = 'ninguno'
 
-    if (Math.abs(balanceA) <= tolerancia) {
-      balance = 0
+    if (ingresoTotal === 0) {
+      deudaBruta = 0
+      deudor = 'ninguno'
+    } else if (Math.abs(balanceA) <= tolerancia) {
+      deudaBruta = 0
       deudor = 'ninguno'
     } else if (balanceA < 0) {
-      balance = Math.abs(balanceA)
+      deudaBruta = Math.abs(balanceA)
       deudor = 'A'
     } else {
-      balance = balanceA
+      deudaBruta = balanceA
       deudor = 'B'
     }
 
+    const totalPagado = deudor === 'ninguno'
+      ? 0
+      : pagosAjuste.filter((p) => p.pagador === deudor).reduce((s, p) => s + p.monto, 0)
+
+    const deudaNeta = Math.max(0, deudaBruta - totalPagado)
+    const balance = deudaNeta
+
     return {
       totalGastos,
-      ingresoTotal,
-      aporteEsperadoA: debeA,
-      aporteEsperadoB: debeB,
+      ingresoTotal: ingresoTotal === 0 ? 0 : ingresoTotal,
+      aporteEsperadoA: ingresoTotal === 0 ? totalGastos / 2 : debeA,
+      aporteEsperadoB: ingresoTotal === 0 ? totalGastos / 2 : debeB,
       aporteRealA: pagadoA,
       aporteRealB: pagadoB,
       balance,
-      deudor,
+      deudor: deudaNeta <= tolerancia ? 'ninguno' : deudor,
+      deudaBruta,
+      totalPagado,
+      deudaNeta,
     }
-  }, [gastos, perfiles, splitPorGasto])
+  }, [gastos, perfiles, splitPorGasto, pagosAjuste])
 
   return {
     mes,
@@ -376,6 +463,7 @@ export function useSplit() {
     gastos,
     metaAhorro,
     aportes,
+    pagosAjuste,
     loading,
     error,
     offline,
@@ -384,6 +472,8 @@ export function useSplit() {
     addGasto,
     addAporte,
     removeGasto,
+    addPagoAjuste,
+    removePagoAjuste,
     splitPorGasto,
     resumen,
   }
