@@ -413,42 +413,57 @@ export function useSplit() {
       debeB += sp.montoB
     }
 
-    const balanceA = pagadoA - debeA
     const tolerancia = 0.01
 
-    let deudaBruta = 0
-    let deudor: 'A' | 'B' | 'ninguno' = 'ninguno'
-
     if (ingresoTotal === 0) {
-      deudaBruta = 0
-      deudor = 'ninguno'
-    } else if (Math.abs(balanceA) <= tolerancia) {
-      deudaBruta = 0
-      deudor = 'ninguno'
-    } else if (balanceA < 0) {
-      deudaBruta = Math.abs(balanceA)
-      deudor = 'A'
-    } else {
-      deudaBruta = balanceA
-      deudor = 'B'
+      return {
+        totalGastos,
+        ingresoTotal: 0,
+        aporteEsperadoA: totalGastos / 2,
+        aporteEsperadoB: totalGastos / 2,
+        aporteRealA: pagadoA,
+        aporteRealB: pagadoB,
+        balance: 0,
+        deudor: 'ninguno',
+        deudaBruta: 0,
+        totalPagado: 0,
+        deudaNeta: 0,
+      }
     }
 
-    const totalPagado = deudor === 'ninguno'
-      ? 0
-      : pagosAjuste.filter((p) => p.pagador === deudor).reduce((s, p) => s + p.monto, 0)
+    // Balance por gastos (positivo = A pagó de más, B le debe a A)
+    const balanceGastosA = pagadoA - debeA
 
-    const deudaNeta = Math.max(0, deudaBruta - totalPagado)
-    const balance = deudaNeta
+    // Pagos de ajuste con dirección: A->B suma al crédito de A, B->A lo resta
+    const pagosAaB = pagosAjuste.filter((p) => p.pagador === 'A').reduce((s, p) => s + p.monto, 0)
+    const pagosBaA = pagosAjuste.filter((p) => p.pagador === 'B').reduce((s, p) => s + p.monto, 0)
+
+    // Balance neto incorporando los pagos de ajuste según su dirección
+    const balanceNetoA = balanceGastosA + pagosAaB - pagosBaA
+
+    // Deuda bruta: lo que surge solo de los gastos (sin pagos)
+    const deudaBruta = Math.abs(balanceGastosA) <= tolerancia ? 0 : Math.abs(balanceGastosA)
+    const deudorBruto: 'A' | 'B' | 'ninguno' =
+      Math.abs(balanceGastosA) <= tolerancia ? 'ninguno' : balanceGastosA < 0 ? 'A' : 'B'
+
+    // Deuda neta: balance real luego de aplicar los pagos en su dirección
+    const deudaNeta = Math.abs(balanceNetoA) <= tolerancia ? 0 : Math.abs(balanceNetoA)
+    const deudor: 'A' | 'B' | 'ninguno' =
+      Math.abs(balanceNetoA) <= tolerancia ? 'ninguno' : balanceNetoA < 0 ? 'A' : 'B'
+
+    // Total pagado que aplica para saldar la deuda bruta (pagos del deudor bruto hacia el acreedor)
+    const totalPagado =
+      deudorBruto === 'B' ? pagosBaA : deudorBruto === 'A' ? pagosAaB : pagosAaB + pagosBaA
 
     return {
       totalGastos,
-      ingresoTotal: ingresoTotal === 0 ? 0 : ingresoTotal,
-      aporteEsperadoA: ingresoTotal === 0 ? totalGastos / 2 : debeA,
-      aporteEsperadoB: ingresoTotal === 0 ? totalGastos / 2 : debeB,
+      ingresoTotal,
+      aporteEsperadoA: debeA,
+      aporteEsperadoB: debeB,
       aporteRealA: pagadoA,
       aporteRealB: pagadoB,
-      balance,
-      deudor: deudaNeta <= tolerancia ? 'ninguno' : deudor,
+      balance: deudaNeta,
+      deudor,
       deudaBruta,
       totalPagado,
       deudaNeta,
