@@ -1,4 +1,5 @@
-import { Trash2, CreditCard, Scale } from 'lucide-react'
+import { Trash2, CreditCard, Scale, User } from 'lucide-react'
+import { tipoSplitDeGasto } from '../types'
 import type { SplitPorGasto } from '../types'
 
 interface ExpenseItemProps {
@@ -16,6 +17,7 @@ export function ExpenseItem({ split, nombreA, nombreB, onRemove }: ExpenseItemPr
   const g = split.gasto
   const pagadorNombre = g.pagador === 'A' ? nombreA : nombreB
   const pagadorColor = g.pagador === 'A' ? 'text-accent bg-accent/10' : 'text-secondary bg-secondary/10'
+  const tipoSplit = tipoSplitDeGasto(g)
 
   return (
     <div className="bg-card rounded-2xl p-4 shadow-[var(--shadow-card)] flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 transition-shadow hover:shadow-[var(--shadow-card-hover)]">
@@ -26,9 +28,14 @@ export function ExpenseItem({ split, nombreA, nombreB, onRemove }: ExpenseItemPr
           <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${pagadorColor}`}>
             <CreditCard size={12} /> Pagó {pagadorNombre}
           </span>
-          {g.tipo_split === 'igual' && (
+          {tipoSplit === 'igual' && (
             <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-bg text-text-light border border-border">
               <Scale size={12} /> 50/50
+            </span>
+          )}
+          {(tipoSplit === 'solo_a' || tipoSplit === 'solo_b') && (
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-bg text-text-light border border-border">
+              <User size={12} /> Solo {tipoSplit === 'solo_a' ? nombreA : nombreB}
             </span>
           )}
         </div>

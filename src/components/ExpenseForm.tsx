@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { PlusCircle, Receipt, Loader2 } from 'lucide-react'
+import type { TipoSplit } from '../types'
 
 interface ExpenseFormProps {
-  onAdd: (nombre: string, monto: number, pagador: 'A' | 'B', tipoSplit: 'proporcional' | 'igual') => void
+  onAdd: (nombre: string, monto: number, pagador: 'A' | 'B', tipoSplit: TipoSplit) => void
   nombreA: string
   nombreB: string
 }
@@ -11,8 +12,15 @@ export function ExpenseForm({ onAdd, nombreA, nombreB }: ExpenseFormProps) {
   const [nombre, setNombre] = useState('')
   const [monto, setMonto] = useState('')
   const [pagador, setPagador] = useState<'A' | 'B'>('A')
-  const [split50, setSplit50] = useState(false)
+  const [tipoSplit, setTipoSplit] = useState<TipoSplit>('proporcional')
   const [guardando, setGuardando] = useState(false)
+
+  const opcionesSplit: { valor: TipoSplit; label: string }[] = [
+    { valor: 'proporcional', label: 'Proporcional' },
+    { valor: 'igual', label: '50 / 50' },
+    { valor: 'solo_a', label: `Solo ${nombreA}` },
+    { valor: 'solo_b', label: `Solo ${nombreB}` },
+  ]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -20,13 +28,13 @@ export function ExpenseForm({ onAdd, nombreA, nombreB }: ExpenseFormProps) {
     if (!nombre.trim() || isNaN(m) || m <= 0) return
     setGuardando(true)
     try {
-      await onAdd(nombre.trim(), m, pagador, split50 ? 'igual' : 'proporcional')
+      await onAdd(nombre.trim(), m, pagador, tipoSplit)
     } finally {
       setGuardando(false)
       setNombre('')
       setMonto('')
       setPagador('A')
-      setSplit50(false)
+      setTipoSplit('proporcional')
     }
   }
 
@@ -94,17 +102,23 @@ export function ExpenseForm({ onAdd, nombreA, nombreB }: ExpenseFormProps) {
             {nombreB}
           </label>
         </div>
-        <div className="sm:ml-auto">
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={split50}
-              onChange={(e) => setSplit50(e.target.checked)}
-              disabled={guardando}
-              className="w-4 h-4 rounded accent-accent"
-            />
-            <span className={split50 ? 'text-accent font-medium' : 'text-text-light'}>50 / 50</span>
-          </label>
+        <div className="sm:ml-auto flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-text-light">División:</span>
+          <div className="flex flex-wrap gap-1 p-1 rounded-xl bg-bg border border-border">
+            {opcionesSplit.map((o) => (
+              <button
+                key={o.valor}
+                type="button"
+                onClick={() => setTipoSplit(o.valor)}
+                disabled={guardando}
+                className={`px-3 py-1 rounded-lg text-xs transition-all disabled:opacity-50 ${
+                  tipoSplit === o.valor ? 'bg-accent text-white font-medium' : 'text-text-light hover:text-text'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </form>

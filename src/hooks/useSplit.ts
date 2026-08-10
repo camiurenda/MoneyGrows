@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Perfil, Gasto, SplitPorGasto, Resumen, MetaAhorro, AporteMeta, PagoAjuste } from '../types'
+import type { Perfil, Gasto, SplitPorGasto, Resumen, MetaAhorro, AporteMeta, PagoAjuste, TipoSplit } from '../types'
 
 function getMesActual(): string {
   const d = new Date()
@@ -230,15 +230,24 @@ export function useSplit() {
   )
 
   const addGasto = useCallback(
-    async (nombre: string, monto: number, pagador: 'A' | 'B', tipoSplit: 'proporcional' | 'igual' = 'proporcional') => {
+    async (nombre: string, monto: number, pagador: 'A' | 'B', tipoSplit: TipoSplit = 'proporcional') => {
       const [a, b] = perfiles.length >= 2 ? [perfiles[0], perfiles[1]] : [null, null]
       const totalIngreso = (a?.ingreso ?? 0) + (b?.ingreso ?? 0)
       let pctA: number | null = null
       let pctB: number | null = null
-      if (tipoSplit === 'proporcional' && totalIngreso > 0) {
+      if (tipoSplit === 'solo_a') {
+        pctA = 1
+        pctB = 0
+      } else if (tipoSplit === 'solo_b') {
+        pctA = 0
+        pctB = 1
+      } else if (tipoSplit === 'proporcional' && totalIngreso > 0) {
         pctA = (a?.ingreso ?? 0) / totalIngreso
         pctB = (b?.ingreso ?? 0) / totalIngreso
       }
+
+      // 'solo_a'/'solo_b' se guardan como split proporcional fijado en 100/0
+      const tipoSplitDb: Gasto['tipo_split'] = tipoSplit === 'igual' ? 'igual' : 'proporcional'
 
       const tempId = crypto.randomUUID()
       const nuevo: Gasto = {
@@ -246,7 +255,7 @@ export function useSplit() {
         nombre,
         monto,
         pagador,
-        tipo_split: tipoSplit,
+        tipo_split: tipoSplitDb,
         mes,
         created_at: new Date().toISOString(),
         porcentaje_persona_a: pctA,
@@ -259,7 +268,7 @@ export function useSplit() {
       if (!offline) {
         const { data, error: err } = await supabase
           .from('gastos')
-          .insert({ nombre, monto, pagador, tipo_split: tipoSplit, mes, porcentaje_persona_a: pctA, porcentaje_persona_b: pctB } as any)
+          .insert({ nombre, monto, pagador, tipo_split: tipoSplitDb, mes, porcentaje_persona_a: pctA, porcentaje_persona_b: pctB } as any)
           .select()
           .single()
         if (err) {

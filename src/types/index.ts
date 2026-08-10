@@ -29,6 +29,15 @@ export interface PagoAjuste {
   created_at?: string
 }
 
+export type TipoSplit = 'proporcional' | 'igual' | 'solo_a' | 'solo_b'
+
+export function tipoSplitDeGasto(g: Gasto): TipoSplit {
+  if (g.tipo_split === 'igual') return 'igual'
+  if (g.porcentaje_persona_a === 1 && g.porcentaje_persona_b === 0) return 'solo_a'
+  if (g.porcentaje_persona_a === 0 && g.porcentaje_persona_b === 1) return 'solo_b'
+  return 'proporcional'
+}
+
 export interface SplitPorGasto {
   gasto: Gasto
   montoA: number
