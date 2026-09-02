@@ -72,4 +72,7 @@ export interface Resumen {
   deudaBruta: number
   totalPagado: number
   deudaNeta: number
+  deudaAnterior: number
+  deudorAnterior: 'A' | 'B' | 'ninguno'
+  mesDeudaAnterior: string | null
 }
