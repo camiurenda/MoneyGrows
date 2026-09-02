@@ -1,5 +1,6 @@
-import { Bird, TrendingUp, Wallet } from 'lucide-react'
+import { Bird, History, TrendingUp, Wallet } from 'lucide-react'
 import type { Resumen, Perfil } from '../types'
+import { nombreDelMes } from '../hooks/useSplit'
 
 interface SummaryPanelProps {
   resumen: Resumen
@@ -23,6 +24,11 @@ export function SummaryPanel({ resumen, perfiles }: SummaryPanelProps) {
     }
     return `${deudorPerfil?.nombre ?? 'Uno'} le debe ${fmt(resumen.deudaNeta)} a ${acreedorPerfil?.nombre ?? 'el otro'}.`
   }
+
+  const deudorAnteriorPerfil = resumen.deudorAnterior === 'A' ? a : resumen.deudorAnterior === 'B' ? b : null
+  const acreedorAnteriorPerfil = resumen.deudorAnterior === 'A' ? b : resumen.deudorAnterior === 'B' ? a : null
+  const mismaDireccion = resumen.deudorAnterior === resumen.deudor
+  const labelMesAnterior = resumen.mesDeudaAnterior ? nombreDelMes(resumen.mesDeudaAnterior) : 'meses anteriores'
 
   return (
     <div className="bg-card rounded-2xl p-6 shadow-[var(--shadow-card)] flex flex-col gap-5">
@@ -57,12 +63,27 @@ export function SummaryPanel({ resumen, perfiles }: SummaryPanelProps) {
         <div className="flex-1">
           <p className="font-semibold text-text">Ajuste del nido</p>
           <p className="text-text-light mt-0.5">{balanceText()}</p>
+          {resumen.deudaAnterior > 0 && (
+            <p className="mt-1.5 text-xs text-text-light flex items-center gap-1">
+              <History size={12} className="shrink-0" />
+              Incluye {fmt(resumen.deudaAnterior)} que {deudorAnteriorPerfil?.nombre ?? 'uno'} le debía a{' '}
+              {acreedorAnteriorPerfil?.nombre ?? 'el otro'} de {labelMesAnterior}.
+            </p>
+          )}
           {resumen.deudor !== 'ninguno' && (
             <div className="mt-3 flex flex-col gap-1.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-text-light">Deuda bruta calculada</span>
+                <span className="text-text-light">Deuda bruta del mes</span>
                 <span className="text-text">{fmt(resumen.deudaBruta)}</span>
               </div>
+              {resumen.deudaAnterior > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-text-light">Deuda de {labelMesAnterior}</span>
+                  <span className={mismaDireccion ? 'text-text' : 'text-secondary'}>
+                    {mismaDireccion ? '+' : '−'} {fmt(resumen.deudaAnterior)}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-text-light">Ya pagado</span>
                 <span className="text-secondary">− {fmt(resumen.totalPagado)}</span>

@@ -13,6 +13,117 @@ export function nombreDelMes(ym: string): string {
   return `${meses[m - 1]} ${y}`
 }
 
+function calcularSplits(gastos: Gasto[], perfiles: Perfil[]): SplitPorGasto[] {
+  const [a, b] = perfiles.length >= 2 ? [perfiles[0], perfiles[1]] : [null, null]
+  const totalIngreso = (a?.ingreso ?? 0) + (b?.ingreso ?? 0)
+  return gastos.map((g) => {
+    if (g.tipo_split === 'igual') {
+      return { gasto: g, montoA: g.monto / 2, montoB: g.monto / 2 }
+    }
+    if (g.porcentaje_persona_a != null && g.porcentaje_persona_b != null) {
+      return {
+        gasto: g,
+        montoA: g.monto * g.porcentaje_persona_a,
+        montoB: g.monto * g.porcentaje_persona_b,
+      }
+    }
+    if (totalIngreso === 0) {
+      return { gasto: g, montoA: g.monto / 2, montoB: g.monto / 2 }
+    }
+    return {
+      gasto: g,
+      montoA: g.monto * ((a?.ingreso ?? 0) / totalIngreso),
+      montoB: g.monto * ((b?.ingreso ?? 0) / totalIngreso),
+    }
+  })
+}
+
+// Balance neto de un mes (positivo = B le debe a A), incluyendo pagos de ajuste
+function balanceNetoDelMes(gastos: Gasto[], perfiles: Perfil[], pagos: PagoAjuste[]): number {
+  let pagadoA = 0
+  let debeA = 0
+  for (const sp of calcularSplits(gastos, perfiles)) {
+    if (sp.gasto.pagador === 'A') pagadoA += sp.gasto.monto
+    debeA += sp.montoA
+  }
+  const pagosAaB = pagos.filter((p) => p.pagador === 'A').reduce((s, p) => s + p.monto, 0)
+  const pagosBaA = pagos.filter((p) => p.pagador === 'B').reduce((s, p) => s + p.monto, 0)
+  return pagadoA - debeA + pagosAaB - pagosBaA
+}
+
+export interface DeudaAnterior {
+  // Positivo = B le debe a A
+  balanceA: number
+  // Último mes anterior con movimientos, para etiquetar la deuda
+  mes: string | null
+}
+
+function acumularDeudaAnterior(
+  gastosPorMes: Record<string, Gasto[]>,
+  perfilesPorMes: Record<string, Perfil[]>,
+  pagosPorMes: Record<string, PagoAjuste[]>,
+  hasta: string
+): DeudaAnterior {
+  const meses = Array.from(new Set([...Object.keys(gastosPorMes), ...Object.keys(pagosPorMes)]))
+    .filter((m) => m < hasta)
+    .sort()
+  let balanceA = 0
+  let ultimo: string | null = null
+  for (const m of meses) {
+    const g = gastosPorMes[m] ?? []
+    const p = pagosPorMes[m] ?? []
+    if (g.length === 0 && p.length === 0) continue
+    balanceA += balanceNetoDelMes(g, perfilesPorMes[m] ?? [], p)
+    ultimo = m
+  }
+  return { balanceA, mes: ultimo }
+}
+
+function agruparPorMes<T extends { mes: string }>(items: T[]): Record<string, T[]> {
+  const out: Record<string, T[]> = {}
+  for (const it of items) {
+    ;(out[it.mes] ??= []).push(it)
+  }
+  return out
+}
+
+// Si el mes no tiene meta, traslada lo que faltó de la última meta anterior no cumplida
+async function trasladarMetaPendiente(mes: string): Promise<MetaAhorro | null> {
+  const { data: prev, error: prevErr } = await supabase
+    .from('metas')
+    .select('*')
+    .lt('mes', mes)
+    .order('mes', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (prevErr || !prev) return null
+  const metaPrev = prev as MetaAhorro
+  if (metaPrev.monto <= 0) return null
+
+  const { data: aportesPrev, error: aportesErr } = await supabase
+    .from('aportes')
+    .select('monto')
+    .eq('mes', metaPrev.mes)
+  if (aportesErr) return null
+  const ahorrado = ((aportesPrev ?? []) as { monto: number }[]).reduce((s, a) => s + a.monto, 0)
+  const pendiente = metaPrev.monto - ahorrado
+  if (pendiente <= 0) return null
+
+  const base = metaPrev.descripcion.replace(/\s*\(pendiente de .*\)$/, '').trim()
+  const descripcion = `${base || 'Ahorro'} (pendiente de ${nombreDelMes(metaPrev.mes)})`
+  const nueva: MetaAhorro = { mes, monto: pendiente, descripcion }
+  const { data, error: err } = await supabase
+    .from('metas')
+    .upsert(nueva, { onConflict: 'mes' })
+    .select()
+    .maybeSingle()
+  if (err) {
+    console.warn('[trasladarMetaPendiente] error:', formatError(err))
+    return nueva
+  }
+  return (data as MetaAhorro | null) ?? nueva
+}
+
 function readLocal<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key)
@@ -53,6 +164,7 @@ export function useSplit() {
   const [metaAhorro, setMetaAhorro] = useState<MetaAhorro | null>(null)
   const [aportes, setAportes] = useState<AporteMeta[]>([])
   const [pagosAjuste, setPagosAjuste] = useState<PagoAjuste[]>([])
+  const [deudaAnterior, setDeudaAnterior] = useState<DeudaAnterior>({ balanceA: 0, mes: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
@@ -133,7 +245,10 @@ export function useSplit() {
           .eq('mes', mes)
           .maybeSingle()
         if (!metaErr) {
-          const fetchedMeta = metaData as MetaAhorro | null
+          let fetchedMeta = metaData as MetaAhorro | null
+          if (!fetchedMeta) {
+            fetchedMeta = await trasladarMetaPendiente(mes)
+          }
           setMetaAhorro(fetchedMeta)
           if (fetchedMeta) setLocalMetaMes(mes, fetchedMeta)
         }
@@ -174,6 +289,25 @@ export function useSplit() {
         setPagosAjuste(localPagosAjusteRef.current[mes] ?? [])
       }
 
+      try {
+        const [{ data: gPrev }, { data: pPrev }, { data: perfPrev }] = await Promise.all([
+          supabase.from('gastos').select('*').lt('mes', mes),
+          supabase.from('pagos_ajuste').select('*').lt('mes', mes),
+          supabase.from('perfiles').select('*').lt('mes', mes).order('id'),
+        ])
+        setDeudaAnterior(
+          acumularDeudaAnterior(
+            agruparPorMes((gPrev ?? []) as Gasto[]),
+            agruparPorMes((perfPrev ?? []) as Perfil[]),
+            agruparPorMes((pPrev ?? []) as PagoAjuste[]),
+            mes
+          )
+        )
+      } catch (prevEx) {
+        console.warn('[loadData] no se pudo calcular deuda anterior:', formatError(prevEx))
+        setDeudaAnterior({ balanceA: 0, mes: null })
+      }
+
       setOffline(false)
     } catch (e) {
       const msg = formatError(e)
@@ -184,6 +318,9 @@ export function useSplit() {
       setMetaAhorro(localMetaRef.current[mes] ?? null)
       setAportes(localAportesRef.current[mes] ?? [])
       setPagosAjuste(localPagosAjusteRef.current[mes] ?? [])
+      setDeudaAnterior(
+        acumularDeudaAnterior(localGastosRef.current, localPerfilesRef.current, localPagosAjusteRef.current, mes)
+      )
       setError('No se pudo conectar con la base. Se usa modo local.')
     } finally {
       setLoading(false)
@@ -376,30 +513,7 @@ export function useSplit() {
     [pagosAjuste, mes, offline, setLocalPagosAjusteMes]
   )
 
-  const splitPorGasto = useMemo<SplitPorGasto[]>(() => {
-    const [a, b] = perfiles.length >= 2 ? [perfiles[0], perfiles[1]] : [null, null]
-    const totalIngreso = (a?.ingreso ?? 0) + (b?.ingreso ?? 0)
-    return gastos.map((g) => {
-      if (g.tipo_split === 'igual') {
-        return { gasto: g, montoA: g.monto / 2, montoB: g.monto / 2 }
-      }
-      if (g.porcentaje_persona_a != null && g.porcentaje_persona_b != null) {
-        return {
-          gasto: g,
-          montoA: g.monto * g.porcentaje_persona_a,
-          montoB: g.monto * g.porcentaje_persona_b,
-        }
-      }
-      if (totalIngreso === 0) {
-        return { gasto: g, montoA: g.monto / 2, montoB: g.monto / 2 }
-      }
-      return {
-        gasto: g,
-        montoA: g.monto * ((a?.ingreso ?? 0) / totalIngreso),
-        montoB: g.monto * ((b?.ingreso ?? 0) / totalIngreso),
-      }
-    })
-  }, [perfiles, gastos])
+  const splitPorGasto = useMemo<SplitPorGasto[]>(() => calcularSplits(gastos, perfiles), [perfiles, gastos])
 
   const resumen = useMemo<Resumen>(() => {
     const [a, b] = perfiles.length >= 2 ? [perfiles[0], perfiles[1]] : [null, null]
@@ -424,7 +538,12 @@ export function useSplit() {
 
     const tolerancia = 0.01
 
-    if (ingresoTotal === 0) {
+    const deudaAnteriorMonto = Math.abs(deudaAnterior.balanceA) <= tolerancia ? 0 : Math.abs(deudaAnterior.balanceA)
+    const deudorAnterior: 'A' | 'B' | 'ninguno' =
+      deudaAnteriorMonto === 0 ? 'ninguno' : deudaAnterior.balanceA < 0 ? 'A' : 'B'
+    const mesDeudaAnterior = deudaAnteriorMonto === 0 ? null : deudaAnterior.mes
+
+    if (ingresoTotal === 0 && deudaAnteriorMonto === 0) {
       return {
         totalGastos,
         ingresoTotal: 0,
@@ -437,6 +556,9 @@ export function useSplit() {
         deudaBruta: 0,
         totalPagado: 0,
         deudaNeta: 0,
+        deudaAnterior: 0,
+        deudorAnterior: 'ninguno',
+        mesDeudaAnterior: null,
       }
     }
 
@@ -447,8 +569,8 @@ export function useSplit() {
     const pagosAaB = pagosAjuste.filter((p) => p.pagador === 'A').reduce((s, p) => s + p.monto, 0)
     const pagosBaA = pagosAjuste.filter((p) => p.pagador === 'B').reduce((s, p) => s + p.monto, 0)
 
-    // Balance neto incorporando los pagos de ajuste según su dirección
-    const balanceNetoA = balanceGastosA + pagosAaB - pagosBaA
+    // Balance neto incorporando los pagos de ajuste según su dirección y la deuda arrastrada
+    const balanceNetoA = balanceGastosA + pagosAaB - pagosBaA + deudaAnterior.balanceA
 
     // Deuda bruta: lo que surge solo de los gastos (sin pagos)
     const deudaBruta = Math.abs(balanceGastosA) <= tolerancia ? 0 : Math.abs(balanceGastosA)
@@ -476,8 +598,11 @@ export function useSplit() {
       deudaBruta,
       totalPagado,
       deudaNeta,
+      deudaAnterior: deudaAnteriorMonto,
+      deudorAnterior,
+      mesDeudaAnterior,
     }
-  }, [gastos, perfiles, splitPorGasto, pagosAjuste])
+  }, [gastos, perfiles, splitPorGasto, pagosAjuste, deudaAnterior])
 
   return {
     mes,
