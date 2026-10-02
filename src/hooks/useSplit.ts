@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Perfil, Gasto, SplitPorGasto, Resumen, MetaAhorro, AporteMeta, PagoAjuste, TipoSplit } from '../types'
+import { tipoSplitDeGasto } from '../types'
 
 function getMesActual(): string {
   const d = new Date()
@@ -20,12 +21,12 @@ function calcularSplits(gastos: Gasto[], perfiles: Perfil[]): SplitPorGasto[] {
     if (g.tipo_split === 'igual') {
       return { gasto: g, montoA: g.monto / 2, montoB: g.monto / 2 }
     }
-    if (g.porcentaje_persona_a != null && g.porcentaje_persona_b != null) {
-      return {
-        gasto: g,
-        montoA: g.monto * g.porcentaje_persona_a,
-        montoB: g.monto * g.porcentaje_persona_b,
-      }
+    const tipo = tipoSplitDeGasto(g)
+    if (tipo === 'solo_a') {
+      return { gasto: g, montoA: g.monto, montoB: 0 }
+    }
+    if (tipo === 'solo_b') {
+      return { gasto: g, montoA: 0, montoB: g.monto }
     }
     if (totalIngreso === 0) {
       return { gasto: g, montoA: g.monto / 2, montoB: g.monto / 2 }
@@ -368,8 +369,6 @@ export function useSplit() {
 
   const addGasto = useCallback(
     async (nombre: string, monto: number, pagador: 'A' | 'B', tipoSplit: TipoSplit = 'proporcional') => {
-      const [a, b] = perfiles.length >= 2 ? [perfiles[0], perfiles[1]] : [null, null]
-      const totalIngreso = (a?.ingreso ?? 0) + (b?.ingreso ?? 0)
       let pctA: number | null = null
       let pctB: number | null = null
       if (tipoSplit === 'solo_a') {
@@ -378,9 +377,6 @@ export function useSplit() {
       } else if (tipoSplit === 'solo_b') {
         pctA = 0
         pctB = 1
-      } else if (tipoSplit === 'proporcional' && totalIngreso > 0) {
-        pctA = (a?.ingreso ?? 0) / totalIngreso
-        pctB = (b?.ingreso ?? 0) / totalIngreso
       }
 
       // 'solo_a'/'solo_b' se guardan como split proporcional fijado en 100/0
@@ -418,7 +414,7 @@ export function useSplit() {
         }
       }
     },
-    [gastos, mes, perfiles, offline, setLocalGastosMes]
+    [gastos, mes, offline, setLocalGastosMes]
   )
 
   const addAporte = useCallback(
@@ -554,6 +550,7 @@ export function useSplit() {
         balance: 0,
         deudor: 'ninguno',
         deudaBruta: 0,
+        deudorBruto: 'ninguno',
         totalPagado: 0,
         deudaNeta: 0,
         deudaAnterior: 0,
@@ -596,6 +593,7 @@ export function useSplit() {
       balance: deudaNeta,
       deudor,
       deudaBruta,
+      deudorBruto,
       totalPagado,
       deudaNeta,
       deudaAnterior: deudaAnteriorMonto,

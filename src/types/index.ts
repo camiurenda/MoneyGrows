@@ -70,6 +70,7 @@ export interface Resumen {
   balance: number
   deudor: 'A' | 'B' | 'ninguno'
   deudaBruta: number
+  deudorBruto: 'A' | 'B' | 'ninguno'
   totalPagado: number
   deudaNeta: number
   deudaAnterior: number

@@ -27,7 +27,7 @@ export function SummaryPanel({ resumen, perfiles }: SummaryPanelProps) {
 
   const deudorAnteriorPerfil = resumen.deudorAnterior === 'A' ? a : resumen.deudorAnterior === 'B' ? b : null
   const acreedorAnteriorPerfil = resumen.deudorAnterior === 'A' ? b : resumen.deudorAnterior === 'B' ? a : null
-  const mismaDireccion = resumen.deudorAnterior === resumen.deudor
+  const mismaDireccion = resumen.deudorBruto === 'ninguno' || resumen.deudorAnterior === resumen.deudorBruto
   const labelMesAnterior = resumen.mesDeudaAnterior ? nombreDelMes(resumen.mesDeudaAnterior) : 'meses anteriores'
 
   return (
